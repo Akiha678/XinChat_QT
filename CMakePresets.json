@@ -1,0 +1,17 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "macos-debug",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build/macos-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/qt",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_OSX_SYSROOT": "/Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk",
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0"
+            }
+        }
+    ]
+}
