@@ -7,7 +7,7 @@
 
 class QLabel;
 class QLineEdit;
-class QPushButton;
+class Button;
 
 // 登录窗口：调用后端 POST /auth/login 完成真实登录。
 // 成功 -> 写入 Session 并发出 loginSucceeded；失败 -> 弹窗提示。
@@ -29,6 +29,5 @@ private slots:
 private:
     QLineEdit *m_usernameEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
-    QPushButton *m_loginButton = nullptr;
-    bool m_loggingIn = false;  // 防止重复提交
+    Button *m_loginButton = nullptr;
 };

@@ -36,10 +36,14 @@ qt_add_executable(XinChat
     src/ui/MainWindow.h
     src/ui/MainWindow.cpp
 
-    src/ui/widgets/MessageBubble.h
-    src/ui/widgets/MessageBubble.cpp
-    src/ui/widgets/ConversationItem.h
-    src/ui/widgets/ConversationItem.cpp
+    src/ui/components/button/button.h
+    src/ui/components/button/button.cpp
+    src/ui/components/dialog/dialog.h
+    src/ui/components/dialog/dialog.cpp
+    src/ui/components/messagebubble/MessageBubble.h
+    src/ui/components/messagebubble/MessageBubble.cpp
+    src/ui/components/conversationitem/ConversationItem.h
+    src/ui/components/conversationitem/ConversationItem.cpp
 )
 
 target_include_directories(XinChat PRIVATE src)

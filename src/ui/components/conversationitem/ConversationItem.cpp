@@ -1,4 +1,4 @@
-#include "ui/widgets/ConversationItem.h"
+#include "ui/components/conversationitem/ConversationItem.h"
 
 #include <QColor>
 #include <QFontMetrics>

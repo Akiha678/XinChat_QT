@@ -3,12 +3,12 @@
 #include <QFont>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
-#include <QPushButton>
 #include <QVBoxLayout>
 
 #include "core/Session.h"
 #include "network/ApiClient.h"
+#include "ui/components/button/button.h"
+#include "ui/components/dialog/dialog.h"
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent)
@@ -30,8 +30,8 @@ LoginWindow::LoginWindow(QWidget *parent)
     m_passwordEdit->setPlaceholderText(QStringLiteral("密码"));
     m_passwordEdit->setEchoMode(QLineEdit::Password);
 
-    m_loginButton = new QPushButton(QStringLiteral("登  录"), this);
-    connect(m_loginButton, &QPushButton::clicked, this, &LoginWindow::onLoginClicked);
+    m_loginButton = new Button(QStringLiteral("登  录"), this);
+    connect(m_loginButton, &Button::clicked, this, &LoginWindow::onLoginClicked);
 
     // 回车键快速提交
     connect(m_usernameEdit, &QLineEdit::returnPressed,
@@ -65,29 +65,25 @@ LoginWindow::LoginWindow(QWidget *parent)
 
 void LoginWindow::onLoginClicked()
 {
-    if (m_loggingIn) {
-        return;
+    if (m_loginButton->isLoading()) {
+        return;  // 防重复提交
     }
     const QString username = m_usernameEdit->text().trimmed();
     const QString password = m_passwordEdit->text();
     if (username.isEmpty() || password.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("提示"),
-                             QStringLiteral("请输入用户名和密码"));
+        Dialog::warning(this, QStringLiteral("提示"),
+                        QStringLiteral("请输入用户名和密码"));
         return;
     }
 
-    m_loggingIn = true;
-    m_loginButton->setEnabled(false);
-    m_loginButton->setText(QStringLiteral("登录中..."));
+    m_loginButton->setLoading(true, QStringLiteral("登录中..."));
 
     ApiClient::instance().login(username, password);
 }
 
 void LoginWindow::onLoginSucceeded(const LoginResult &result)
 {
-    m_loggingIn = false;
-    m_loginButton->setEnabled(true);
-    m_loginButton->setText(QStringLiteral("登  录"));
+    m_loginButton->setLoading(false);
 
     // 保存登录态，供后续鉴权接口使用
     Session::instance().setLogin(result);
@@ -100,9 +96,7 @@ void LoginWindow::onLoginSucceeded(const LoginResult &result)
 
 void LoginWindow::onLoginFailed(int /*httpStatus*/, int /*code*/, const QString &message)
 {
-    m_loggingIn = false;
-    m_loginButton->setEnabled(true);
-    m_loginButton->setText(QStringLiteral("登  录"));
+    m_loginButton->setLoading(false);
 
-    QMessageBox::warning(this, QStringLiteral("登录失败"), message);
+    Dialog::warning(this, QStringLiteral("登录失败"), message);
 }

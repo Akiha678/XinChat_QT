@@ -13,8 +13,8 @@
 #include <QVBoxLayout>
 
 #include "core/UserManager.h"
-#include "ui/widgets/ConversationItem.h"
-#include "ui/widgets/MessageBubble.h"
+#include "ui/components/conversationitem/ConversationItem.h"
+#include "ui/components/messagebubble/MessageBubble.h"
 
 namespace {
 constexpr int kConversationItemHeight = 64;

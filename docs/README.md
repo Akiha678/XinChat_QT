@@ -104,19 +104,21 @@ CMake 会自动重编译变更的文件；新增/删除源文件后需要重新�
 ```
 src/
 ├── main.cpp                        # 入口：全局样式 + 登录→主窗口流程
-├── core/                           # 业务层（不依赖界面）
+├── core/                           # 业务层（纯逻辑，不依赖界面）
 │   ├── models.h                    # ChatMessage / Conversation / UserInfo 等数据结构
 │   ├── Session.h/.cpp              # 全局会话（登录用户信息 + accessToken）
 │   └── UserManager.h/.cpp          # 会话/消息管理（假数据 + 自动回复演示）
 ├── network/                        # 网络层
 │   ├── ApiClient.h/.cpp            # REST 客户端（POST /auth/login 等，基于 QNetworkAccessManager）
 │   └── TcpClient.h/.cpp            # 实时通道占位接口（阶段 4 实现）
-└── ui/
+└── ui/                             # 界面层
     ├── login/LoginWindow.h/.cpp    # 登录窗口（真实登录）
     ├── MainWindow.h/.cpp           # 三栏主窗口
-    └── widgets/
-        ├── MessageBubble.h/.cpp    # 聊天气泡（自绘）
-        └── ConversationItem.h/.cpp # 会话列表项（自绘）
+    └── components/                 # 可复用 UI 组件库（每个组件一个文件夹）
+        ├── button/button.h/.cpp    # 主按钮组件（微信绿 + 加载态）
+        ├── dialog/dialog.h/.cpp    # 弹窗工具组件（统一提示/确认样式）
+        ├── messagebubble/          # 聊天气泡（自绘）
+        └── conversationitem/       # 会话列表项（自绘）
 ```
 
 ## 七、开发路线

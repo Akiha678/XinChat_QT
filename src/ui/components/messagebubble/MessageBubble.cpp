@@ -1,4 +1,4 @@
-#include "ui/widgets/MessageBubble.h"
+#include "ui/components/messagebubble/MessageBubble.h"
 
 #include <QColor>
 #include <QFontMetrics>
