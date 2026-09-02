@@ -6,6 +6,7 @@
 #include "core/models.h"
 
 class ChatManager;
+class Button;
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
@@ -30,11 +31,13 @@ private slots:
     void onNavChanged(int row);
     void onConversationSelected(QListWidgetItem *item);
     void onSendClicked();
+    void onToggleTheme();
 
     void onSessionsChanged();
     void onSessionMessagesChanged(qint64 sessionId);
     void onMessageAdded(const ChatMessage &message);
     void onRequestError(const QString &operation, const QString &message);
+    void onThemeChanged();
 
 private:
     QWidget *createChatPage();
@@ -45,6 +48,8 @@ private:
     void appendMessage(const ChatMessage &message);
     QListWidgetItem *conversationItemOf(qint64 sessionId) const;
     void setChatHeader(const QString &text);
+    void refreshItemWidgets();        // 主题变化后重绘列表项（气泡/会话行）
+    void updateThemeToggleText();
 
     ChatManager *m_chat = nullptr;
 
@@ -55,6 +60,7 @@ private:
     QListWidget *m_messageList = nullptr;
     QLabel *m_chatHeader = nullptr;
     QTextEdit *m_inputEdit = nullptr;
+    Button *m_themeToggle = nullptr;
 
     qint64 m_currentSessionId = 0;
     QString m_currentUserName;

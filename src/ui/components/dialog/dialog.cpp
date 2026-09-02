@@ -3,21 +3,26 @@
 #include <QMessageBox>
 #include <QPushButton>
 
+#include "ui/color/Theme.h"
+
 namespace {
 
 const QString kOkText = QStringLiteral("确定");
 const QString kCancelText = QStringLiteral("取消");
 
-// 主按钮绿色，次按钮灰色
+// 主按钮用主题主色，次按钮用中性色
 QPushButton *styleButton(QMessageBox &box, const QString &text, bool primary)
 {
+    const Theme::Palette &p = Theme::instance().palette();
     auto *btn = box.addButton(text, primary ? QMessageBox::AcceptRole
                                             : QMessageBox::RejectRole);
     btn->setStyleSheet(primary
-        ? QStringLiteral("background-color:#07C160;color:#FFFFFF;border:none;"
+        ? QStringLiteral("background-color:%1;color:%2;border:none;"
                          "border-radius:6px;padding:6px 16px;min-width:72px;")
-        : QStringLiteral("background-color:#F0F0F0;color:#333333;border:none;"
-                         "border-radius:6px;padding:6px 16px;min-width:72px;"));
+              .arg(Theme::toCss(p.primary), Theme::toCss(p.textOnPrimary))
+        : QStringLiteral("background-color:%1;color:%2;border:none;"
+                         "border-radius:6px;padding:6px 16px;min-width:72px;")
+              .arg(Theme::toCss(p.buttonNeutralBg), Theme::toCss(p.buttonNeutralText)));
     return btn;
 }
 

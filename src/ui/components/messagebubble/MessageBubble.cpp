@@ -5,6 +5,8 @@
 #include <QPainter>
 #include <QRect>
 
+#include "ui/color/Theme.h"
+
 namespace {
 constexpr int kMarginLeftRight = 12;  // 气泡距控件左右边缘
 constexpr int kPadding = 12;          // 气泡内边距
@@ -51,12 +53,14 @@ void MessageBubble::paintEvent(QPaintEvent *event)
         bubbleRect = QRect(kMarginLeftRight, 4, bubbleWidth, bubbleHeight);
     }
 
+    // 颜色取自主题色板（自己=主题绿气泡，对方=面板色气泡）
+    const Theme::Palette &palette = Theme::instance().palette();
+    const bool self = (m_role == Self);
     p.setPen(Qt::NoPen);
-    p.setBrush(m_role == Self ? QColor(0x95, 0xEC, 0x69)   // 微信绿
-                              : QColor(0xFF, 0xFF, 0xFF));
+    p.setBrush(self ? palette.bubbleSelf : palette.bubbleOther);
     p.drawRoundedRect(bubbleRect, kCornerRadius, kCornerRadius);
 
-    p.setPen(m_role == Self ? QColor(0x1A, 0x1A, 0x1A) : QColor(0x33, 0x33, 0x33));
+    p.setPen(self ? palette.bubbleSelfText : palette.bubbleOtherText);
     p.drawText(bubbleRect.adjusted(kPadding, kPadding, -kPadding, -kPadding),
                Qt::TextWordWrap | Qt::AlignLeft | Qt::AlignVCenter, m_text);
 }

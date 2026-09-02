@@ -6,6 +6,7 @@
 #include <QRect>
 
 #include "core/Format.h"
+#include "ui/color/Theme.h"
 
 namespace {
 constexpr int kItemHeight = 64;
@@ -29,6 +30,8 @@ void ConversationItem::paintEvent(QPaintEvent *event)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
+    const Theme::Palette &theme = Theme::instance().palette();
+
     // 圆形头像（色板色 + 名称首字）
     const QRect avatarRect(12, (height() - kAvatarSize) / 2, kAvatarSize, kAvatarSize);
     p.setPen(Qt::NoPen);
@@ -51,7 +54,7 @@ void ConversationItem::paintEvent(QPaintEvent *event)
         const int badgeW = qMax(18, countFm.horizontalAdvance(countText) + 8);
         const QRect badgeRect(avatarRect.right() - badgeW / 2 + 4,
                               avatarRect.top() - 2, badgeW, 18);
-        p.setBrush(QColor(0xFA, 0x51, 0x51));
+        p.setBrush(theme.danger);
         p.drawRoundedRect(badgeRect, 9, 9);
         p.setPen(Qt::white);
         QFont badgeFont = font();
@@ -65,15 +68,15 @@ void ConversationItem::paintEvent(QPaintEvent *event)
     nameFont.setPixelSize(15);
     nameFont.setBold(true);
     p.setFont(nameFont);
-    p.setPen(QColor(0x33, 0x33, 0x33));
+    p.setPen(theme.textStrong);
     p.drawText(QRect(66, 10, width() - 66 - 60, 20),
                Qt::AlignLeft | Qt::AlignVCenter, m_conv.name);
 
-    // 最近一条消息（灰色小字，超长省略）
+    // 最近一条消息（小字，超长省略）
     QFont msgFont = font();
     msgFont.setPixelSize(12);
     p.setFont(msgFont);
-    p.setPen(QColor(0x99, 0x99, 0x99));
+    p.setPen(theme.textSecondary);
     const QFontMetrics msgFm(msgFont);
     const QString elided = msgFm.elidedText(m_conv.preview, Qt::ElideRight,
                                             width() - 66 - 16);
@@ -81,7 +84,7 @@ void ConversationItem::paintEvent(QPaintEvent *event)
                Qt::AlignLeft | Qt::AlignVCenter, elided);
 
     // 时间（右上角）
-    p.setPen(QColor(0xBB, 0xBB, 0xBB));
+    p.setPen(theme.textMuted);
     p.drawText(QRect(width() - 56, 10, 44, 16),
                Qt::AlignRight | Qt::AlignVCenter,
                xc::formatConversationTime(m_conv.lastMessageAt));

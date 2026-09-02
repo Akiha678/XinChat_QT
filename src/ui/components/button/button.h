@@ -13,6 +13,8 @@ public:
     bool isLoading() const;
 
 private:
+    void rebuildStyle();  // 按当前主题重建样式
+
     QString m_normalText;   // 正常态文案（进入加载态前的文本）
     bool m_loading = false;
 };

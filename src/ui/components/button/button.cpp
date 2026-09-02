@@ -1,6 +1,6 @@
 #include "ui/components/button/button.h"
 
-// 封装Button组件
+#include "ui/color/Theme.h"
 
 Button::Button(const QString &text, QWidget *parent)
     : QPushButton(text, parent)
@@ -9,18 +9,34 @@ Button::Button(const QString &text, QWidget *parent)
     setCursor(Qt::PointingHandCursor);
     setMinimumHeight(36);
 
+    // 主题切换时自动重建样式
+    connect(&Theme::instance(), &Theme::themeChanged,
+            this, [this]() { rebuildStyle(); });
+    rebuildStyle();
+}
+
+void Button::rebuildStyle()
+{
+    const Theme::Palette &p = Theme::instance().palette();
+    const QString primary = Theme::toCss(p.primary);
+    const QString hover = Theme::toCss(p.primaryHover);
+    const QString pressed = Theme::toCss(p.primaryPressed);
+    const QString disabled = Theme::toCss(p.primaryDisabled);
+    const QString onPrimary = Theme::toCss(p.textOnPrimary);
+
     setStyleSheet(QStringLiteral(R"(
         QPushButton {
-            background-color: #07C160;
-            color: #FFFFFF;
+            background-color: %1;
+            color: %2;
             border: none;
             border-radius: 6px;
             font-size: 15px;
         }
-        QPushButton:hover { background-color: #06AD56; }
-        QPushButton:pressed { background-color: #059A4D; }
-        QPushButton:disabled { background-color: #A8D8B8; }
-    )"));
+        QPushButton:hover { background-color: %3; }
+        QPushButton:pressed { background-color: %4; }
+        QPushButton:disabled { background-color: %5; }
+    )")
+                      .arg(primary, onPrimary, hover, pressed, disabled));
 }
 
 void Button::setLoading(bool loading, const QString &loadingText)

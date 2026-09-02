@@ -15,15 +15,12 @@
 #include "core/Session.h"
 #include "network/ApiClient.h"
 #include "third_party/qrcodegen/qrcodegen.hpp"
+#include "ui/color/Theme.h"
 #include "ui/components/button/button.h"
 #include "ui/components/dialog/dialog.h"
 
 namespace {
 const QString kDemoPassword = QStringLiteral("123456");  // 后端种子账号密码
-
-// 文字链接（绿色，无下划线），点击触发回调 —— 用于登录方式切换
-const char kLinkStyle[] =
-    "<a href=\"switch\" style=\"color:#07C160; text-decoration:none;\">%1</a>";
 }
 
 LoginWindow::LoginWindow(QWidget *parent)
@@ -53,7 +50,12 @@ LoginWindow::LoginWindow(QWidget *parent)
 QLabel *LoginWindow::createSwitchLink(const QString &text,
                                       const std::function<void()> &onActivated) const
 {
-    auto *link = new QLabel(QString::fromLatin1(kLinkStyle).arg(text));
+    // 颜色取主题链接色（浅色=微信绿，深色=亮绿）
+    const QString linkColor =
+        Theme::instance().palette().link.name(QColor::HexRgb);
+    auto *link = new QLabel(QStringLiteral("<a href=\"switch\" style=\"color:%1;"
+                                           " text-decoration:none;\">%2</a>")
+                                .arg(linkColor, text));
     link->setAlignment(Qt::AlignCenter);
     link->setCursor(Qt::PointingHandCursor);
     link->setTextInteractionFlags(Qt::LinksAccessibleByMouse);

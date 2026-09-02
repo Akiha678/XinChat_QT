@@ -39,6 +39,8 @@ qt_add_executable(XinChat
     src/ui/login/LoginWindow.cpp
     src/ui/MainWindow.h
     src/ui/MainWindow.cpp
+    src/ui/color/Theme.h
+    src/ui/color/Theme.cpp
 
     src/ui/components/button/button.h
     src/ui/components/button/button.cpp

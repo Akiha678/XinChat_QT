@@ -14,6 +14,8 @@
 #include <QVBoxLayout>
 
 #include "core/ChatManager.h"
+#include "ui/color/Theme.h"
+#include "ui/components/button/button.h"
 #include "ui/components/conversationitem/ConversationItem.h"
 #include "ui/components/messagebubble/MessageBubble.h"
 
@@ -69,6 +71,10 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onMessageAdded);
     connect(m_chat, &ChatManager::requestError,
             this, &MainWindow::onRequestError);
+
+    // 主题变化：刷新导航图标与列表项颜色
+    connect(&Theme::instance(), &Theme::themeChanged,
+            this, &MainWindow::onThemeChanged);
 }
 
 void MainWindow::setCurrentUser(const QString &displayName)
@@ -164,9 +170,28 @@ QWidget *MainWindow::createSettingsPage()
 {
     auto *page = new QWidget(this);
     auto *layout = new QVBoxLayout(page);
-    auto *label = new QLabel(QStringLiteral("设置\n\n当前用户：%1").arg(m_currentUserName), page);
-    label->setAlignment(Qt::AlignCenter);
-    layout->addWidget(label);
+    layout->setContentsMargins(60, 40, 60, 40);
+
+    auto *title = new QLabel(QStringLiteral("设置"), page);
+    QFont titleFont = title->font();
+    titleFont.setPixelSize(20);
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+
+    auto *userLabel = new QLabel(page);
+    userLabel->setObjectName(QStringLiteral("settingsUserLabel"));
+    userLabel->setText(QStringLiteral("当前用户：%1").arg(m_currentUserName));
+
+    m_themeToggle = new Button(QString(), page);
+    connect(m_themeToggle, &Button::clicked, this, &MainWindow::onToggleTheme);
+    updateThemeToggleText();
+
+    layout->addWidget(title);
+    layout->addSpacing(20);
+    layout->addWidget(userLabel);
+    layout->addSpacing(30);
+    layout->addWidget(m_themeToggle);
+    layout->addStretch();
     return page;
 }
 
@@ -298,4 +323,43 @@ QListWidgetItem *MainWindow::conversationItemOf(qint64 sessionId) const
         }
     }
     return nullptr;
+}
+
+// ---------- 主题相关 ----------
+
+void MainWindow::refreshItemWidgets()
+{
+    const auto refresh = [](QListWidget *list) {
+        for (int i = 0; i < list->count(); ++i) {
+            if (QWidget *w = list->itemWidget(list->item(i))) {
+                w->update();  // 气泡/会话行的 paintEvent 会读取新色板
+            }
+        }
+    };
+    refresh(m_conversationList);
+    refresh(m_messageList);
+}
+
+void MainWindow::updateThemeToggleText()
+{
+    if (!m_themeToggle) {
+        return;
+    }
+    m_themeToggle->setText(
+        Theme::instance().scheme() == Theme::Scheme::Dark
+            ? QStringLiteral("切换到浅色模式")
+            : QStringLiteral("切换到深色模式"));
+}
+
+void MainWindow::onToggleTheme()
+{
+    Theme::instance().setScheme(
+        Theme::instance().scheme() == Theme::Scheme::Dark ? Theme::Scheme::Light
+                                                          : Theme::Scheme::Dark);
+}
+
+void MainWindow::onThemeChanged()
+{
+    refreshItemWidgets();
+    updateThemeToggleText();
 }

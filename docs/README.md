@@ -115,6 +115,7 @@ src/
 └── ui/                             # 界面层
     ├── login/LoginWindow.h/.cpp    # 登录窗口（文字链接切换：账号登录 + 扫码登录演示）
     ├── MainWindow.h/.cpp           # 三栏主窗口
+    ├── color/Theme.h/.cpp          # 主题组件：语义化色板（浅色/深色）+ 全局 QSS 生成
     └── components/                 # 可复用 UI 组件库（每个组件一个文件夹）
         ├── button/button.h/.cpp    # 主按钮组件（微信绿 + 加载态）
         ├── dialog/dialog.h/.cpp    # 弹窗工具组件（统一提示/确认样式）
