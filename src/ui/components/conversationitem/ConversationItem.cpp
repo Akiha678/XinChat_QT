@@ -5,6 +5,8 @@
 #include <QPainter>
 #include <QRect>
 
+#include "core/Format.h"
+
 namespace {
 constexpr int kItemHeight = 64;
 constexpr int kAvatarSize = 42;
@@ -27,10 +29,10 @@ void ConversationItem::paintEvent(QPaintEvent *event)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    // 圆形头像（色块 + 昵称首字）
+    // 圆形头像（色板色 + 名称首字）
     const QRect avatarRect(12, (height() - kAvatarSize) / 2, kAvatarSize, kAvatarSize);
     p.setPen(Qt::NoPen);
-    p.setBrush(m_conv.avatarColor);
+    p.setBrush(xc::avatarColor(m_conv.colorSeed));
     p.drawEllipse(avatarRect);
 
     QFont avatarFont = font();
@@ -38,24 +40,42 @@ void ConversationItem::paintEvent(QPaintEvent *event)
     avatarFont.setPixelSize(16);
     p.setFont(avatarFont);
     p.setPen(Qt::white);
-    p.drawText(avatarRect, Qt::AlignCenter, m_conv.friendName.left(1));
+    p.drawText(avatarRect, Qt::AlignCenter, m_conv.name.left(1));
 
-    // 昵称（加粗）
+    // 未读角标：头像右上角红色圆 + 数字
+    if (m_conv.unreadCount > 0) {
+        const QString countText =
+            m_conv.unreadCount > 99 ? QStringLiteral("99+")
+                                    : QString::number(m_conv.unreadCount);
+        const QFontMetrics countFm(font());
+        const int badgeW = qMax(18, countFm.horizontalAdvance(countText) + 8);
+        const QRect badgeRect(avatarRect.right() - badgeW / 2 + 4,
+                              avatarRect.top() - 2, badgeW, 18);
+        p.setBrush(QColor(0xFA, 0x51, 0x51));
+        p.drawRoundedRect(badgeRect, 9, 9);
+        p.setPen(Qt::white);
+        QFont badgeFont = font();
+        badgeFont.setPixelSize(11);
+        p.setFont(badgeFont);
+        p.drawText(badgeRect, Qt::AlignCenter, countText);
+    }
+
+    // 名称（加粗）
     QFont nameFont = font();
     nameFont.setPixelSize(15);
     nameFont.setBold(true);
     p.setFont(nameFont);
     p.setPen(QColor(0x33, 0x33, 0x33));
     p.drawText(QRect(66, 10, width() - 66 - 60, 20),
-               Qt::AlignLeft | Qt::AlignVCenter, m_conv.friendName);
+               Qt::AlignLeft | Qt::AlignVCenter, m_conv.name);
 
-    // 最后一条消息（灰色小字，超长省略）
+    // 最近一条消息（灰色小字，超长省略）
     QFont msgFont = font();
     msgFont.setPixelSize(12);
     p.setFont(msgFont);
     p.setPen(QColor(0x99, 0x99, 0x99));
     const QFontMetrics msgFm(msgFont);
-    const QString elided = msgFm.elidedText(m_conv.lastMessage, Qt::ElideRight,
+    const QString elided = msgFm.elidedText(m_conv.preview, Qt::ElideRight,
                                             width() - 66 - 16);
     p.drawText(QRect(66, 34, width() - 66 - 16, 18),
                Qt::AlignLeft | Qt::AlignVCenter, elided);
@@ -63,5 +83,6 @@ void ConversationItem::paintEvent(QPaintEvent *event)
     // 时间（右上角）
     p.setPen(QColor(0xBB, 0xBB, 0xBB));
     p.drawText(QRect(width() - 56, 10, 44, 16),
-               Qt::AlignRight | Qt::AlignVCenter, m_conv.timeText);
+               Qt::AlignRight | Qt::AlignVCenter,
+               xc::formatConversationTime(m_conv.lastMessageAt));
 }

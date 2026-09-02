@@ -1,6 +1,6 @@
 #include "network/ApiClient.h"
 
-#include <QDateTime>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -8,6 +8,9 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
+
+#include "core/Format.h"
+#include "core/Session.h"
 
 namespace {
 
@@ -21,23 +24,98 @@ QString apiBaseUrl()
     return QStringLiteral("http://127.0.0.1:8080");
 }
 
-// 解析 ISO-8601 时间字符串，如 "2026-09-08T05:40:05.554935Z"
-// Qt 只支持毫秒精度，这里截断多余小数位并去掉 Z 后缀
-QDateTime parseIsoInstant(const QString &text)
+// 从响应体解析 JSON 对象；解析失败返回空对象
+QJsonObject parseBodyObject(const QByteArray &raw, bool *ok)
 {
-    QString t = text;
-    if (t.endsWith(QLatin1Char('Z'))) {
-        t.chop(1);
+    if (ok) {
+        *ok = false;
     }
-    const int dot = t.indexOf(QLatin1Char('.'));
-    if (dot >= 0) {
-        t = t.left(dot + 1) + t.mid(dot + 1).left(3);
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(raw, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return QJsonObject();
     }
-    QDateTime dt = QDateTime::fromString(t, QStringLiteral("yyyy-MM-ddTHH:mm:ss.zzz"));
-    if (!dt.isValid()) {
-        dt = QDateTime::fromString(text, Qt::ISODate);
+    if (ok) {
+        *ok = true;
     }
-    return dt;
+    return doc.object();
+}
+
+// 业务是否失败：HTTP>=400，或 HTTP200 但业务 code != 1000（NetworkResponse.failure）
+bool isBusinessError(int httpStatus, const QJsonObject &obj)
+{
+    if (httpStatus >= 400) {
+        return true;
+    }
+    return obj.contains(QStringLiteral("code"))
+           && obj.value(QStringLiteral("code")).toInt() != 1000;
+}
+
+// 提取错误描述（兼容 NetworkResponse / Spring ErrorResponse）
+QString extractErrorMessage(int httpStatus, const QJsonObject &obj)
+{
+    QString message = obj.value(QStringLiteral("message")).toString();
+    if (message.isEmpty()) {
+        message = obj.value(QStringLiteral("error")).toString();
+    }
+    if (message.isEmpty()) {
+        message = QStringLiteral("请求失败（HTTP %1）").arg(httpStatus);
+    }
+    return message;
+}
+
+// 取 NetworkResponse.data；无 data 字段时返回空对象
+QJsonObject unwrapData(const QJsonObject &obj)
+{
+    const QJsonValue data = obj.value(QStringLiteral("data"));
+    if (data.isObject()) {
+        return data.toObject();
+    }
+    return QJsonObject();
+}
+
+QJsonArray unwrapDataArray(const QJsonObject &obj)
+{
+    const QJsonValue data = obj.value(QStringLiteral("data"));
+    if (data.isArray()) {
+        return data.toArray();
+    }
+    return QJsonArray();
+}
+
+// MsgResponse -> ChatMessage
+ChatMessage parseMessage(const QJsonObject &m)
+{
+    ChatMessage msg;
+    msg.id = m.value(QStringLiteral("id")).toVariant().toLongLong();
+    msg.sessionId = m.value(QStringLiteral("sessionId")).toVariant().toLongLong();
+    msg.senderId = m.value(QStringLiteral("userId")).toVariant().toLongLong();
+    msg.nickName = m.value(QStringLiteral("nickName")).toString();
+    msg.isSelf = m.value(QStringLiteral("type")).toInt() == 0;  // 0=本人发送
+    msg.isRead = m.value(QStringLiteral("status")).toInt() == 1;
+    msg.timestamp = xc::parseIsoInstant(m.value(QStringLiteral("createTime")).toString());
+
+    const QJsonObject content = m.value(QStringLiteral("content")).toObject();
+    msg.text = content.value(QStringLiteral("data")).toString();
+    if (msg.text.isEmpty()) {
+        msg.text = content.value(QStringLiteral("text")).toString();  // 兼容旧格式
+    }
+    return msg;
+}
+
+// ConversationResponse -> Conversation
+Conversation parseConversation(const QJsonObject &c)
+{
+    Conversation conv;
+    conv.id = c.value(QStringLiteral("id")).toVariant().toLongLong();
+    conv.peerId = c.value(QStringLiteral("peerId")).toVariant().toLongLong();
+    conv.name = c.value(QStringLiteral("name")).toString();
+    conv.preview = c.value(QStringLiteral("preview")).toString();
+    conv.lastMessageAt =
+        xc::parseIsoInstant(c.value(QStringLiteral("lastMessageAt")).toString());
+    conv.unreadCount = c.value(QStringLiteral("unreadCount")).toInt();
+    conv.colorSeed = c.value(QStringLiteral("colorSeed")).toInt();
+    return conv;
 }
 
 }  // namespace
@@ -58,6 +136,22 @@ QString ApiClient::baseUrl()
 {
     return apiBaseUrl();
 }
+
+QNetworkRequest ApiClient::makeAuthedRequest(const QString &path) const
+{
+    QNetworkRequest request(QUrl(apiBaseUrl() + path));
+    request.setHeader(QNetworkRequest::ContentTypeHeader,
+                      QStringLiteral("application/json"));
+    request.setTransferTimeout(10000);
+    const QString &token = Session::instance().token();
+    if (!token.isEmpty()) {
+        request.setRawHeader("Authorization",
+                             QStringLiteral("Bearer %1").arg(token).toUtf8());
+    }
+    return request;
+}
+
+// ---------- 登录 ----------
 
 void ApiClient::login(const QString &username, const QString &password)
 {
@@ -91,42 +185,23 @@ void ApiClient::handleLoginReply(QNetworkReply *reply)
         return;
     }
 
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(raw, &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
+    bool parseOk = false;
+    const QJsonObject obj = parseBodyObject(raw, &parseOk);
+    if (!parseOk) {
         emit loginFailed(httpStatus, 0, QStringLiteral("服务器返回数据格式错误"));
         return;
     }
-    const QJsonObject obj = doc.object();
 
-    // 业务失败判定（两种情况）：
-    // 1) HTTP 4xx/5xx —— Spring ErrorResponse {"status":401,"error":"Unauthorized","message":"..."}
-    // 2) HTTP 200 但 body 携带业务错误码（本后端 /auth 下返回 NetworkResponse.failure，
-    //    形如 {"data":null,"code":401,"message":"用户名或密码错误"}）
-    const bool hasBusinessCode = obj.contains(QStringLiteral("code"));
-    const bool businessError = hasBusinessCode
-                               && obj.value(QStringLiteral("code")).toInt() != 1000;
-    if (httpStatus >= 400 || businessError) {
-        QString message = obj.value(QStringLiteral("message")).toString();
-        if (message.isEmpty()) {
-            message = obj.value(QStringLiteral("error")).toString();
-        }
-        if (message.isEmpty()) {
-            message = QStringLiteral("登录失败（HTTP %1）").arg(httpStatus);
-        }
-        const int bizCode = businessError ? obj.value(QStringLiteral("code")).toInt() : 0;
-        emit loginFailed(httpStatus, bizCode, message);
+    if (isBusinessError(httpStatus, obj)) {
+        emit loginFailed(httpStatus, obj.value(QStringLiteral("code")).toInt(),
+                         extractErrorMessage(httpStatus, obj));
         return;
     }
 
-    // 成功：直接返回 LoginResponse（顶层含 accessToken），
-    // 或包在 NetworkResponse.data 里，两种都兼容
+    // 成功：直接返回 LoginResponse（顶层含 accessToken），或包在 data 里，两种都兼容
     QJsonObject data = obj;
     if (!obj.contains(QStringLiteral("accessToken"))) {
-        const QJsonValue wrapped = obj.value(QStringLiteral("data"));
-        if (wrapped.isObject()) {
-            data = wrapped.toObject();
-        }
+        data = unwrapData(obj);
     }
     if (!data.contains(QStringLiteral("accessToken"))) {
         emit loginFailed(httpStatus, 0, QStringLiteral("登录响应缺少 accessToken"));
@@ -140,7 +215,151 @@ void ApiClient::handleLoginReply(QNetworkReply *reply)
     result.user.email = data.value(QStringLiteral("email")).toString();
     result.user.avatarColor = data.value(QStringLiteral("avatarColor")).toInt();
     result.accessToken = data.value(QStringLiteral("accessToken")).toString();
-    result.expiresAt = parseIsoInstant(data.value(QStringLiteral("expiresAt")).toString());
+    result.expiresAt = xc::parseIsoInstant(data.value(QStringLiteral("expiresAt")).toString());
 
     emit loginSucceeded(result);
+}
+
+// ---------- 聊天接口 ----------
+
+void ApiClient::fetchSessions()
+{
+    QNetworkRequest request = makeAuthedRequest(QStringLiteral("/chat/session"));
+    QNetworkReply *reply = m_nam->get(request);
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply]() { handleSessionsReply(reply); });
+}
+
+void ApiClient::handleSessionsReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const int httpStatus =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray raw = reply->readAll();
+
+    if (httpStatus == 0 && reply->error() != QNetworkReply::NoError) {
+        emit chatRequestFailed(QStringLiteral("会话列表"),
+                               QStringLiteral("无法连接服务器"));
+        return;
+    }
+    bool parseOk = false;
+    const QJsonObject obj = parseBodyObject(raw, &parseOk);
+    if (!parseOk || isBusinessError(httpStatus, obj)) {
+        emit chatRequestFailed(QStringLiteral("会话列表"),
+                               parseOk ? extractErrorMessage(httpStatus, obj)
+                                       : QStringLiteral("服务器返回数据格式错误"));
+        return;
+    }
+
+    QList<Conversation> sessions;
+    const QJsonArray arr = unwrapDataArray(obj);
+    for (const QJsonValue &v : arr) {
+        sessions.append(parseConversation(v.toObject()));
+    }
+    emit sessionsLoaded(sessions);
+}
+
+void ApiClient::fetchMessages(qint64 sessionId, int page, int size)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("sessionId"),
+                QJsonValue::fromVariant(QVariant::fromValue<qint64>(sessionId)));
+    body.insert(QStringLiteral("page"), page);
+    body.insert(QStringLiteral("size"), size);
+
+    QNetworkRequest request =
+        makeAuthedRequest(QStringLiteral("/chat/message/page"));
+    QNetworkReply *reply = m_nam->post(
+        request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, sessionId, reply]() {
+        handleMessagesReply(sessionId, reply);
+    });
+}
+
+void ApiClient::handleMessagesReply(qint64 sessionId, QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const int httpStatus =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray raw = reply->readAll();
+
+    if (httpStatus == 0 && reply->error() != QNetworkReply::NoError) {
+        emit chatRequestFailed(QStringLiteral("消息记录"),
+                               QStringLiteral("无法连接服务器"));
+        return;
+    }
+    bool parseOk = false;
+    const QJsonObject obj = parseBodyObject(raw, &parseOk);
+    if (!parseOk || isBusinessError(httpStatus, obj)) {
+        emit chatRequestFailed(QStringLiteral("消息记录"),
+                               parseOk ? extractErrorMessage(httpStatus, obj)
+                                       : QStringLiteral("服务器返回数据格式错误"));
+        return;
+    }
+
+    QList<ChatMessage> messages;
+    const QJsonObject data = unwrapData(obj);  // {list:[...], pagination:{...}}
+    const QJsonArray arr = data.value(QStringLiteral("list")).toArray();
+    for (const QJsonValue &v : arr) {
+        messages.append(parseMessage(v.toObject()));
+    }
+    const int total =
+        data.value(QStringLiteral("pagination")).toObject()
+            .value(QStringLiteral("total")).toInt();
+    emit messagesLoaded(sessionId, messages, total);
+}
+
+void ApiClient::sendMessage(qint64 sessionId, const QString &content)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("content"), content);
+
+    QNetworkRequest request = makeAuthedRequest(
+        QStringLiteral("/chat/session/%1/message").arg(sessionId));
+    QNetworkReply *reply = m_nam->post(
+        request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply]() { handleSendReply(reply); });
+}
+
+void ApiClient::handleSendReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const int httpStatus =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray raw = reply->readAll();
+
+    if (httpStatus == 0 && reply->error() != QNetworkReply::NoError) {
+        emit chatRequestFailed(QStringLiteral("发送消息"),
+                               QStringLiteral("无法连接服务器"));
+        return;
+    }
+    bool parseOk = false;
+    const QJsonObject obj = parseBodyObject(raw, &parseOk);
+    if (!parseOk || isBusinessError(httpStatus, obj)) {
+        emit chatRequestFailed(QStringLiteral("发送消息"),
+                               parseOk ? extractErrorMessage(httpStatus, obj)
+                                       : QStringLiteral("服务器返回数据格式错误"));
+        return;
+    }
+    emit messageSent(parseMessage(unwrapData(obj)));
+}
+
+void ApiClient::markMessagesRead(const QList<qint64> &messageIds)
+{
+    if (messageIds.isEmpty()) {
+        return;
+    }
+    QJsonArray ids;
+    for (qint64 id : messageIds) {
+        ids.append(QJsonValue::fromVariant(QVariant::fromValue<qint64>(id)));
+    }
+    QJsonObject body;
+    body.insert(QStringLiteral("ids"), ids);
+
+    QNetworkRequest request =
+        makeAuthedRequest(QStringLiteral("/chat/message/read"));
+    QNetworkReply *reply = m_nam->post(
+        request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
 }

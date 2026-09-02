@@ -4,20 +4,27 @@
 #include <QDateTime>
 #include <QString>
 
-// 一条聊天消息
+// 一条聊天消息（对应后端 MsgResponse）
 struct ChatMessage {
-    QString senderName;   // 发送者昵称
-    QString text;         // 消息内容（后续可扩展 type 字段支持图片/文件/语音）
-    bool isSelf = false;  // 是否是自己发出的
-    QDateTime timestamp;  // 发送时间
+    qint64 id = 0;           // 消息 ID
+    qint64 sessionId = 0;    // 所属会话 ID
+    qint64 senderId = 0;     // 发送者用户 ID
+    QString nickName;        // 发送者昵称
+    QString text;            // 文本内容（content.data）
+    bool isSelf = false;     // 是否自己发送（后端 type==0）
+    bool isRead = false;     // 是否已读（status==1）
+    QDateTime timestamp;     // 发送时间（createTime）
 };
 
-// 会话列表里的一行（好友/群）
+// 会话（对应后端 ConversationResponse）
 struct Conversation {
-    QString friendName;    // 好友或群名称
-    QString lastMessage;   // 最后一条消息预览
-    QString timeText;      // 显示时间，如 "10:24" / "昨天"
-    QColor avatarColor;    // 头像底色（暂无头像图片，用首字 + 颜色代替）
+    qint64 id = 0;           // 会话 ID（发消息/拉历史用）
+    qint64 peerId = 0;       // 对端用户 ID
+    QString name;            // 会话展示名（单聊 = 对方昵称）
+    QString preview;         // 最近一条消息预览
+    QDateTime lastMessageAt; // 最近消息时间
+    int unreadCount = 0;     // 未读数
+    int colorSeed = 0;       // 头像颜色种子（整数索引，客户端映射为色板）
 };
 
 // 当前登录用户信息（对应后端 LoginResponse）

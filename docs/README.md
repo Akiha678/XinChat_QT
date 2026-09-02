@@ -106,19 +106,20 @@ src/
 ├── main.cpp                        # 入口：全局样式 + 登录→主窗口流程
 ├── core/                           # 业务层（纯逻辑，不依赖界面）
 │   ├── models.h                    # ChatMessage / Conversation / UserInfo 等数据结构
+│   ├── Format.h                    # 时间解析/格式化 + 头像色板工具
 │   ├── Session.h/.cpp              # 全局会话（登录用户信息 + accessToken）
-│   └── UserManager.h/.cpp          # 会话/消息管理（假数据 + 自动回复演示）
+│   └── ChatManager.h/.cpp          # 聊天数据管理（会话/消息/发送/实时接收，真实后端数据）
 ├── network/                        # 网络层
-│   ├── ApiClient.h/.cpp            # REST 客户端（POST /auth/login 等，基于 QNetworkAccessManager）
-│   └── TcpClient.h/.cpp            # 实时通道占位接口（阶段 4 实现）
+│   ├── ApiClient.h/.cpp            # REST 客户端（登录/会话/消息，自动携带 Bearer token）
+│   └── WsClient.h/.cpp             # WebSocket 实时通道（/ws/chat，message.created 推送）
 └── ui/                             # 界面层
-    ├── login/LoginWindow.h/.cpp    # 登录窗口（页签：账号登录 + 扫码登录演示）
+    ├── login/LoginWindow.h/.cpp    # 登录窗口（文字链接切换：账号登录 + 扫码登录演示）
     ├── MainWindow.h/.cpp           # 三栏主窗口
     └── components/                 # 可复用 UI 组件库（每个组件一个文件夹）
         ├── button/button.h/.cpp    # 主按钮组件（微信绿 + 加载态）
         ├── dialog/dialog.h/.cpp    # 弹窗工具组件（统一提示/确认样式）
         ├── messagebubble/          # 聊天气泡（自绘）
-        └── conversationitem/       # 会话列表项（自绘）
+        └── conversationitem/       # 会话列表项（自绘 + 未读角标）
 
 third_party/qrcodegen/              # 二维码生成库（Nayuki，MIT，无依赖）
 ```
@@ -130,6 +131,6 @@ third_party/qrcodegen/              # 二维码生成库（Nayuki，MIT，无依
 | 1 | 项目结构重构 + 登录/主窗口骨架 | ✅ 完成 |
 | 2 | 三栏主界面 + 消息气泡 | ✅ 完成 |
 | 3 | 真实登录（对接后端 POST /auth/login） | ✅ 完成 |
-| 4 | 会话/消息接口接入（GET /chat/session 等） | ⬜ 待做 |
-| 5 | SQLite 本地存储 + 实时通道（WebSocket） | ⬜ 待做 |
-| 6 | 功能迭代（好友、离线消息、文件传输等） | ⬜ 待做 |
+| 4 | 会话/消息接入：真实会话列表、历史消息、发送、WebSocket 实时接收 | ✅ 完成 |
+| 5 | SQLite 本地缓存（消息历史持久化、离线展示） | ⬜ 待做 |
+| 6 | 功能迭代（好友管理、未读同步、文件传输等） | ⬜ 待做 |

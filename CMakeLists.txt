@@ -15,19 +15,23 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 REQUIRED COMPONENTS
     Widgets
     Network
+    WebSockets
 )
 
 qt_add_executable(XinChat
     src/main.cpp
 
     src/core/models.h
+    src/core/Format.h
     src/core/Session.h
     src/core/Session.cpp
-    src/core/UserManager.h
-    src/core/UserManager.cpp
+    src/core/ChatManager.h
+    src/core/ChatManager.cpp
 
     src/network/ApiClient.h
     src/network/ApiClient.cpp
+    src/network/WsClient.h
+    src/network/WsClient.cpp
     src/network/TcpClient.h
     src/network/TcpClient.cpp
 
@@ -55,4 +59,5 @@ target_include_directories(XinChat PRIVATE src)
 target_link_libraries(XinChat PRIVATE
     Qt6::Widgets
     Qt6::Network
+    Qt6::WebSockets
 )

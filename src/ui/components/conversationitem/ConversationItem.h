@@ -4,7 +4,7 @@
 
 #include "core/models.h"
 
-// 会话列表项：圆形头像(色块+首字) + 昵称 + 最后消息 + 时间
+// 会话列表项：圆形头像(色块+首字) + 名称 + 最近消息 + 时间 + 未读角标
 class ConversationItem : public QWidget {
     Q_OBJECT
 

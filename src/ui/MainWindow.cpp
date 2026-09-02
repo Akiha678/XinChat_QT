@@ -1,6 +1,7 @@
 #include "ui/MainWindow.h"
 
 #include <QAbstractItemView>
+#include <QDebug>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -12,7 +13,7 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 
-#include "core/UserManager.h"
+#include "core/ChatManager.h"
 #include "ui/components/conversationitem/ConversationItem.h"
 #include "ui/components/messagebubble/MessageBubble.h"
 
@@ -25,7 +26,7 @@ constexpr int kConversationListWidth = 260;
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    m_userManager = new UserManager(this);
+    m_chat = new ChatManager(this);
 
     setWindowTitle(QStringLiteral("XinChat"));
     resize(1000, 700);
@@ -59,24 +60,32 @@ MainWindow::MainWindow(QWidget *parent)
     rootLayout->addWidget(m_stack, 1);
     setCentralWidget(central);
 
-    // 业务信号 -> 界面刷新
-    connect(m_userManager, &UserManager::messageAdded,
+    // 数据层信号 -> 界面刷新
+    connect(m_chat, &ChatManager::sessionsChanged,
+            this, &MainWindow::onSessionsChanged);
+    connect(m_chat, &ChatManager::sessionMessagesChanged,
+            this, &MainWindow::onSessionMessagesChanged);
+    connect(m_chat, &ChatManager::messageAdded,
             this, &MainWindow::onMessageAdded);
-    connect(m_userManager, &UserManager::conversationUpdated,
-            this, &MainWindow::onConversationUpdated);
-
-    rebuildConversationList();
-
-    // 默认选中第一个会话
-    if (m_conversationList->count() > 0) {
-        m_conversationList->setCurrentRow(0);
-    }
+    connect(m_chat, &ChatManager::requestError,
+            this, &MainWindow::onRequestError);
 }
 
-void MainWindow::setCurrentUser(const QString &username)
+void MainWindow::setCurrentUser(const QString &displayName)
 {
-    m_userManager->setCurrentUser(username);
-    setWindowTitle(QStringLiteral("XinChat - %1").arg(username));
+    m_currentUserName = displayName;
+    setWindowTitle(QStringLiteral("XinChat - %1").arg(displayName));
+}
+
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    if (!m_started) {
+        m_started = true;
+        // 登录完成：建立实时通道并拉取会话列表
+        m_chat->startRealtime();
+        m_chat->loadSessions();
+    }
 }
 
 QWidget *MainWindow::createChatPage()
@@ -145,7 +154,7 @@ QWidget *MainWindow::createContactsPage()
 {
     auto *page = new QWidget(this);
     auto *layout = new QVBoxLayout(page);
-    auto *label = new QLabel(QStringLiteral("通讯录\n\n（阶段 3 加入好友列表/分组管理）"), page);
+    auto *label = new QLabel(QStringLiteral("通讯录\n\n（好友列表后续接入 GET /contact/friends）"), page);
     label->setAlignment(Qt::AlignCenter);
     layout->addWidget(label);
     return page;
@@ -155,21 +164,46 @@ QWidget *MainWindow::createSettingsPage()
 {
     auto *page = new QWidget(this);
     auto *layout = new QVBoxLayout(page);
-    auto *label = new QLabel(QStringLiteral("设置\n\n（主题、账号信息等，后续迭代）"), page);
+    auto *label = new QLabel(QStringLiteral("设置\n\n当前用户：%1").arg(m_currentUserName), page);
     label->setAlignment(Qt::AlignCenter);
     layout->addWidget(label);
     return page;
 }
 
+void MainWindow::setChatHeader(const QString &text)
+{
+    m_chatHeader->setText(text);
+}
+
 void MainWindow::rebuildConversationList()
 {
+    const qint64 keepSessionId = m_currentSessionId;
+
     m_conversationList->clear();
-    const QList<Conversation> &conversations = m_userManager->conversations();
+    const QList<Conversation> &conversations = m_chat->conversations();
     for (const Conversation &conv : conversations) {
         auto *item = new QListWidgetItem(m_conversationList);
-        item->setData(Qt::UserRole, conv.friendName);
+        item->setData(Qt::UserRole, QVariant::fromValue<qint64>(conv.id));
         item->setSizeHint(QSize(0, kConversationItemHeight));
         m_conversationList->setItemWidget(item, new ConversationItem(conv));
+    }
+
+    if (conversations.isEmpty()) {
+        setChatHeader(QStringLiteral("暂无会话"));
+        m_messageList->clear();
+        return;
+    }
+
+    // 恢复之前的选中会话，否则默认选第一个（触发拉取消息）
+    QListWidgetItem *target = nullptr;
+    if (keepSessionId != 0) {
+        target = conversationItemOf(keepSessionId);
+    }
+    if (!target) {
+        target = m_conversationList->item(0);
+    }
+    if (target) {
+        m_conversationList->setCurrentItem(target);
     }
 }
 
@@ -183,15 +217,21 @@ void MainWindow::onConversationSelected(QListWidgetItem *item)
     if (!item) {
         return;
     }
-    m_currentFriend = item->data(Qt::UserRole).toString();
-    m_chatHeader->setText(m_currentFriend);
-    reloadMessages();
+    m_currentSessionId = item->data(Qt::UserRole).toLongLong();
+    const QList<Conversation> &all = m_chat->conversations();
+    for (const Conversation &conv : all) {
+        if (conv.id == m_currentSessionId) {
+            setChatHeader(conv.name);
+            break;
+        }
+    }
+    m_chat->openSession(m_currentSessionId);
 }
 
 void MainWindow::reloadMessages()
 {
     m_messageList->clear();
-    const QList<ChatMessage> &messages = m_userManager->messagesFor(m_currentFriend);
+    const QList<ChatMessage> &messages = m_chat->messagesOf(m_currentSessionId);
     for (const ChatMessage &msg : messages) {
         appendMessage(msg);
     }
@@ -210,46 +250,50 @@ void MainWindow::appendMessage(const ChatMessage &message)
 
 void MainWindow::onSendClicked()
 {
-    if (m_currentFriend.isEmpty()) {
+    if (m_currentSessionId == 0) {
         return;
     }
     const QString text = m_inputEdit->toPlainText().trimmed();
     if (text.isEmpty()) {
         return;
     }
-    m_userManager->sendMessage(m_currentFriend, text);
+    m_chat->sendText(m_currentSessionId, text);
     m_inputEdit->clear();
 }
 
-void MainWindow::onMessageAdded(const QString &friendName, const ChatMessage &message)
+void MainWindow::onSessionsChanged()
 {
-    if (friendName == m_currentFriend) {
+    rebuildConversationList();
+}
+
+void MainWindow::onSessionMessagesChanged(qint64 sessionId)
+{
+    if (sessionId == m_currentSessionId) {
+        reloadMessages();
+    }
+}
+
+void MainWindow::onMessageAdded(const ChatMessage &message)
+{
+    if (message.sessionId == m_currentSessionId) {
         appendMessage(message);
     }
 }
 
-void MainWindow::onConversationUpdated(const QString &friendName,
-                                       const QString & /*lastMessage*/,
-                                       const QString & /*timeText*/)
+void MainWindow::onRequestError(const QString &operation, const QString &message)
 {
-    if (QListWidgetItem *item = conversationItemOf(friendName)) {
-        const QList<Conversation> &all = m_userManager->conversations();
-        for (const Conversation &conv : all) {
-            if (conv.friendName == friendName) {
-                m_conversationList->removeItemWidget(item);
-                item->setSizeHint(QSize(0, kConversationItemHeight));
-                m_conversationList->setItemWidget(item, new ConversationItem(conv));
-                break;
-            }
-        }
+    qWarning() << "[MainWindow]" << operation << "失败:" << message;
+    // 简单提示：标题栏短暂提示或仅在无会话时展示错误
+    if (m_chat->conversations().isEmpty()) {
+        setChatHeader(QStringLiteral("%1失败：%2").arg(operation, message));
     }
 }
 
-QListWidgetItem *MainWindow::conversationItemOf(const QString &friendName) const
+QListWidgetItem *MainWindow::conversationItemOf(qint64 sessionId) const
 {
     for (int i = 0; i < m_conversationList->count(); ++i) {
         QListWidgetItem *item = m_conversationList->item(i);
-        if (item->data(Qt::UserRole).toString() == friendName) {
+        if (item->data(Qt::UserRole).toLongLong() == sessionId) {
             return item;
         }
     }
