@@ -44,6 +44,10 @@ qt_add_executable(XinChat
     src/ui/components/messagebubble/MessageBubble.cpp
     src/ui/components/conversationitem/ConversationItem.h
     src/ui/components/conversationitem/ConversationItem.cpp
+
+    # 第三方库：QR Code 生成器（Nayuki，MIT 协议，无依赖）
+    src/third_party/qrcodegen/qrcodegen.hpp
+    src/third_party/qrcodegen/qrcodegen.cpp
 )
 
 target_include_directories(XinChat PRIVATE src)

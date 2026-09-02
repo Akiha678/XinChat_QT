@@ -112,13 +112,15 @@ src/
 │   ├── ApiClient.h/.cpp            # REST 客户端（POST /auth/login 等，基于 QNetworkAccessManager）
 │   └── TcpClient.h/.cpp            # 实时通道占位接口（阶段 4 实现）
 └── ui/                             # 界面层
-    ├── login/LoginWindow.h/.cpp    # 登录窗口（真实登录）
+    ├── login/LoginWindow.h/.cpp    # 登录窗口（页签：账号登录 + 扫码登录演示）
     ├── MainWindow.h/.cpp           # 三栏主窗口
     └── components/                 # 可复用 UI 组件库（每个组件一个文件夹）
         ├── button/button.h/.cpp    # 主按钮组件（微信绿 + 加载态）
         ├── dialog/dialog.h/.cpp    # 弹窗工具组件（统一提示/确认样式）
         ├── messagebubble/          # 聊天气泡（自绘）
         └── conversationitem/       # 会话列表项（自绘）
+
+third_party/qrcodegen/              # 二维码生成库（Nayuki，MIT，无依赖）
 ```
 
 ## 七、开发路线
