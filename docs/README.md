@@ -51,7 +51,7 @@ cmake --build build/macos-debug
 2. 登录成功后进入主窗口：
    - 左侧导航：消息 / 通讯录 / 设置
    - 中间点击会话切换聊天对象
-   - 底部输入文字，点「发送」或按 `Ctrl+Enter` 发送
+   - 底部输入文字，按 `Enter` 发送，按 `Shift+Enter` 换行
    - 对方会自动回复（演示逻辑，模拟真实收发链路）
 
 > 后端地址可用环境变量覆盖：`XINCHAT_API_BASE=http://192.168.x.x:8080 ./build/macos-debug/XinChat`

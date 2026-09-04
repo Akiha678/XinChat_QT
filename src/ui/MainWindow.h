@@ -8,6 +8,7 @@
 
 class ChatManager;
 class ContactManager;
+class QEvent;
 class Button;
 class QLabel;
 class QLineEdit;
@@ -35,6 +36,7 @@ signals:
 
 protected:
     void showEvent(QShowEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void onNavChanged(int row);

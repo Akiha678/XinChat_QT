@@ -4,13 +4,6 @@
 #include <QObject>
 #include <QString>
 
-// 主题色板：项目内所有颜色集中于此，避免散落硬编码。
-//
-//   - palette() 取当前方案的语义化颜色（浅色/深色两套）
-//   - 代码画图用：painter.setPen(Theme::instance().palette().primary);
-//   - 切换主题：Theme::instance().setScheme(Scheme::Dark)
-//     → 自动重建全局 QSS 并发出 themeChanged，各组件自行刷新
-//   - 组件内拼 QSS 用 Theme::toCss(color) 得到 "#RRGGBB"
 class Theme : public QObject {
     Q_OBJECT
 
@@ -19,6 +12,11 @@ public:
 
     // 语义化颜色集合（一份完整色板）
     struct Palette {
+        QColor screenBg;
+        QColor whiteBg;
+        QColor contentBg;
+
+
         // 品牌主色
         QColor primary;     
         QColor primaryHover;

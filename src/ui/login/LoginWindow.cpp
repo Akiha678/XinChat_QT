@@ -58,7 +58,6 @@ void LoginWindow::resetForLogout()
 QLabel *LoginWindow::createSwitchLink(const QString &text,
                                       const std::function<void()> &onActivated) const
 {
-    // 颜色取主题链接色（浅色=微信绿，深色=亮绿）
     const QString linkColor =
         Theme::instance().palette().link.name(QColor::HexRgb);
     auto *link = new QLabel(QStringLiteral("<a href=\"switch\" style=\"color:%1;"

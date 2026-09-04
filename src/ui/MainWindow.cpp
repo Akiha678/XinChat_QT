@@ -2,7 +2,10 @@
 
 #include <QAbstractItemView>
 #include <QDebug>
+#include <QEvent>
+#include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -62,6 +65,12 @@ MainWindow::MainWindow(QWidget *parent)
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
     rootLayout->addWidget(m_navList);
+    auto *navSeparator = new QFrame(central);
+    navSeparator->setObjectName(QStringLiteral("mainSeparator"));
+    navSeparator->setFrameShape(QFrame::VLine);
+    navSeparator->setFrameShadow(QFrame::Plain);
+    navSeparator->setFixedWidth(1);
+    rootLayout->addWidget(navSeparator);
     rootLayout->addWidget(m_stack, 1);
     setCentralWidget(central);
 
@@ -113,6 +122,23 @@ void MainWindow::showEvent(QShowEvent *event)
     }
 }
 
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_inputEdit && event->type() == QEvent::KeyPress) {
+        auto *keyEvent = static_cast<QKeyEvent *>(event);
+        const int key = keyEvent->key();
+        const Qt::KeyboardModifiers modifiers = keyEvent->modifiers();
+        // Enter 发送；Shift+Enter 保留 QTextEdit 默认行为用于换行。
+        if ((key == Qt::Key_Return || key == Qt::Key_Enter)
+            && !(modifiers & Qt::ShiftModifier)) {
+            onSendClicked();
+            keyEvent->accept();
+            return true;
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
 // 聊天列表
 QWidget *MainWindow::createChatPage()
 {
@@ -149,17 +175,8 @@ QWidget *MainWindow::createChatPage()
     m_inputEdit = new QTextEdit(this);
     m_inputEdit->setObjectName(QStringLiteral("inputEdit"));
     m_inputEdit->setFixedHeight(110);
-    m_inputEdit->setPlaceholderText(QStringLiteral("请输入消息"));
-
-    // 发送按钮
-    auto *sendButton = new QPushButton(QStringLiteral("发送"), this);
-    sendButton->setFixedWidth(80);
-    connect(sendButton, &QPushButton::clicked, this, &MainWindow::onSendClicked);
-
-    auto *inputRow = new QHBoxLayout;
-    inputRow->setContentsMargins(12, 8, 12, 8);
-    inputRow->addWidget(m_inputEdit, 1);
-    inputRow->addWidget(sendButton, 0, Qt::AlignBottom);
+    m_inputEdit->setPlaceholderText(QStringLiteral("请输入消息（Enter 发送，Shift+Enter 换行）"));
+    m_inputEdit->installEventFilter(this);
 
     auto *chatArea = new QWidget(this);
     auto *chatLayout = new QVBoxLayout(chatArea);
@@ -167,7 +184,10 @@ QWidget *MainWindow::createChatPage()
     chatLayout->setSpacing(0);
     chatLayout->addWidget(m_chatHeader);
     chatLayout->addWidget(m_messageList, 1);
-    chatLayout->addLayout(inputRow);
+    auto *inputLayout = new QVBoxLayout;
+    inputLayout->setContentsMargins(12, 8, 12, 8);
+    inputLayout->addWidget(m_inputEdit);
+    chatLayout->addLayout(inputLayout);
 
     // 中栏 + 右栏 分栏
     auto *splitter = new QSplitter(Qt::Horizontal, this);
@@ -175,6 +195,7 @@ QWidget *MainWindow::createChatPage()
     splitter->addWidget(chatArea);
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
+    splitter->setHandleWidth(1);
     splitter->setSizes({kConversationListWidth, 740});
     return splitter;
 }

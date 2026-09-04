@@ -16,12 +16,17 @@ constexpr QColor rgb(int r, int g, int b)
 Theme::Palette Theme::lightPalette()
 {
     Palette p;
+    // 背景颜色 - 浅色模式
+    p.screenBg = rgb(0xF1, 0xF4, 0xFA);
+    p.whiteBg = rgb(0xFF, 0xFF, 0xFF);
+    p.contentBg = rgb(0xF8, 0xF8, 0xF8);
+    
     p.primary          = rgb(0x00, 0x52, 0xD9);
     p.primaryHover     = p.primary; // 鼠标悬浮时主题颜色
     p.primaryPressed   = p.primary; // 按钮点击时主题颜色
     p.primaryDisabled  = p.primary; // 按钮不可点击时颜色
     // 左侧导航
-    p.navBg            = rgb(0xD, 0xA6, 0xB1); // 导航栏背景颜色
+    p.navBg            = rgb(0xD, 0xA6, 0xB1);  // 导航栏背景颜色
     p.navHoverBg       = rgb(0xC6, 0xC6, 0xC6); // 鼠标悬浮背景颜色
     p.navActiveBg      = rgb(0x07, 0xC1, 0x60); // 
     p.navText          = rgb(0x8B, 0x8B, 0x8B); // 未选中字体颜色
@@ -161,7 +166,9 @@ QString Theme::buildStyleSheet(const Palette &p) const
     rules << QStringLiteral("QListWidget::item:selected { background: %1; }")
                  .arg(css(p.listSelectedBg));
 
-    rules << QStringLiteral("#navList { background: %1; }").arg(css(p.navBg));
+    rules << QStringLiteral("#navList { background: %1; }").arg(css(p.screenBg));
+    rules << QStringLiteral("#mainSeparator { background: %1; border: none; }")
+                 .arg(css(p.splitterHandle));
     rules << QStringLiteral("#navList::item { color: %1; padding: 4px 0; }").arg(css(p.navText));
     rules << QStringLiteral("#navList::item:hover { background: %1; }").arg(css(p.navHoverBg));
     // 选中态仅通过主题主色文字区分，不再绘制选中背景。
@@ -179,11 +186,12 @@ QString Theme::buildStyleSheet(const Palette &p) const
     rules << QStringLiteral("#chatHeader { background: %1; border-bottom: 1px solid %2;"
                             " font-size: 16px; font-weight: bold; }")
                  .arg(css(p.headerBg), css(p.headerBorder));
-    rules << QStringLiteral("#inputEdit { border: none; background: %1; padding: 8px;"
-                            " font-size: 14px; }")
-                 .arg(css(p.inputBg));
+    rules << QStringLiteral("#inputEdit { border: none; border-top: 1px solid %1;"
+                            " background: %2; padding: 8px; font-size: 14px; }")
+                 .arg(css(p.headerBorder), css(p.inputBg));
 
-    rules << QStringLiteral("QSplitter::handle { background: %1; }").arg(css(p.splitterHandle));
+    rules << QStringLiteral("QSplitter::handle { background: %1; width: 1px; }")
+                 .arg(css(p.splitterHandle));
     rules << "QScrollBar:vertical { background: transparent; width: 8px; }";
     rules << QStringLiteral("QScrollBar::handle:vertical { background: %1; border-radius: 4px;"
                             " min-height: 30px; }")
