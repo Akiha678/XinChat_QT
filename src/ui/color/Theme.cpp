@@ -183,9 +183,11 @@ QString Theme::buildStyleSheet(const Palette &p) const
     rules << QStringLiteral("#messageList { background: %1; }").arg(css(p.chatBg));
     rules << "#messageList::item { border: none; background: transparent; }";
 
-    rules << QStringLiteral("#chatHeader { background: %1; border-bottom: 1px solid %2;"
+    rules << QStringLiteral("#chatHeader { background: %1; border: none;"
                             " font-size: 16px; font-weight: bold; }")
-                 .arg(css(p.headerBg), css(p.headerBorder));
+                 .arg(css(p.headerBg));
+    rules << QStringLiteral("#chatHeaderSeparator { background: %1; border: none; }")
+                 .arg(css(p.headerBorder));
     rules << QStringLiteral("#inputEdit { border: none; border-top: 1px solid %1;"
                             " background: %2; padding: 8px; font-size: 14px; }")
                  .arg(css(p.headerBorder), css(p.inputBg));

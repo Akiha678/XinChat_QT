@@ -54,7 +54,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_navList, &QListWidget::currentRowChanged,
             this, &MainWindow::onNavChanged);
 
-    // ---- 右侧页面栈（聊天 / 通讯录 / 设置） ----
+    // ---- 右侧页面栈 ----
     m_stack = new QStackedWidget(this);
     m_stack->addWidget(createChatPage());
     m_stack->addWidget(createContactsPage());
@@ -159,7 +159,7 @@ QWidget *MainWindow::createChatPage()
 
     // 聊天区（右栏）
     m_chatHeader = new QLabel(QStringLiteral("请选择会话"), this);
-    m_chatHeader->setObjectName(QStringLiteral("chatHeader"));
+    m_chatHeader->setObjectName(QStringLiteral("messageList"));
     m_chatHeader->setFixedHeight(50);
     m_chatHeader->setAlignment(Qt::AlignCenter);
 
@@ -174,7 +174,7 @@ QWidget *MainWindow::createChatPage()
     // 输入消息框
     m_inputEdit = new QTextEdit(this);
     m_inputEdit->setObjectName(QStringLiteral("inputEdit"));
-    m_inputEdit->setFixedHeight(110);
+    m_inputEdit->setFixedHeight(88);
     m_inputEdit->setPlaceholderText(QStringLiteral("请输入消息（Enter 发送，Shift+Enter 换行）"));
     m_inputEdit->installEventFilter(this);
 
@@ -183,9 +183,16 @@ QWidget *MainWindow::createChatPage()
     chatLayout->setContentsMargins(0, 0, 0, 0);
     chatLayout->setSpacing(0);
     chatLayout->addWidget(m_chatHeader);
+    auto *headerSeparator = new QFrame(chatArea);
+    headerSeparator->setObjectName(QStringLiteral("chatHeaderSeparator"));
+    headerSeparator->setFrameShape(QFrame::HLine);
+    headerSeparator->setFrameShadow(QFrame::Plain);
+    headerSeparator->setFixedHeight(1);
+    chatLayout->addWidget(headerSeparator);
     chatLayout->addWidget(m_messageList, 1);
     auto *inputLayout = new QVBoxLayout;
-    inputLayout->setContentsMargins(12, 8, 12, 8);
+    inputLayout->setContentsMargins(0, 0, 0, 0);
+    inputLayout->setSpacing(0);
     inputLayout->addWidget(m_inputEdit);
     chatLayout->addLayout(inputLayout);
 
