@@ -7,6 +7,7 @@
 #include "core/models.h"
 
 class ChatManager;
+class ContactManager;
 class Button;
 class QLabel;
 class QLineEdit;
@@ -70,6 +71,7 @@ private:
     void rebuildSearchResults(const QList<UserSummary> &users);
 
     ChatManager *m_chat = nullptr;
+    ContactManager *m_contacts = nullptr;
 
     QListWidget *m_navList = nullptr;
     QStackedWidget *m_stack = nullptr;

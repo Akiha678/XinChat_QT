@@ -2,8 +2,8 @@
 
 基于 Qt 6 (C++17) 的类微信 IM 通信软件（macOS）。
 
-当前阶段：**客户端 UI 骨架** —— 登录窗口 + 三栏主界面（导航栏 / 会话列表 / 聊天区），
-业务层使用内存假数据驱动界面，网络层已留好接口（`src/network/TcpClient.h`），后续接入。
+当前阶段：**客户端业务版本** —— 登录窗口 + 三栏主界面（导航栏 / 会话列表 / 聊天区），
+已接入真实登录、聊天、WebSocket 实时消息、好友搜索与好友申请。
 
 ---
 
@@ -49,7 +49,7 @@ cmake --build build/macos-debug
    - 测试账号（后端种子数据）：`admin1 / 123456`
    - 后端未启动时提示"无法连接服务器"；账号或密码错误时提示服务端返回的错误信息
 2. 登录成功后进入主窗口：
-   - 左侧导航：💬 消息 / 👥 通讯录 / ⚙️ 设置
+   - 左侧导航：消息 / 通讯录 / 设置
    - 中间点击会话切换聊天对象
    - 底部输入文字，点「发送」或按 `Ctrl+Enter` 发送
    - 对方会自动回复（演示逻辑，模拟真实收发链路）
@@ -103,17 +103,20 @@ CMake 会自动重编译变更的文件；新增/删除源文件后需要重新�
 
 ```
 src/
-├── main.cpp                        # 入口：全局样式 + 登录→主窗口流程
-├── core/                           # 业务层（纯逻辑，不依赖界面）
+├── main.cpp                        # 入口：创建 QApplication 与 ApplicationController
+├── app/                            # 应用编排层
+│   └── ApplicationController.*      # 登录/退出与窗口生命周期
+├── core/                           # 领域与应用服务层（不依赖界面）
 │   ├── models.h                    # ChatMessage / Conversation / UserInfo 等数据结构
 │   ├── Format.h                    # 时间解析/格式化 + 头像色板工具
 │   ├── Session.h/.cpp              # 全局会话（登录用户信息 + accessToken）
-│   └── ChatManager.h/.cpp          # 聊天数据管理（会话/消息/发送/实时接收，真实后端数据）
+│   ├── ChatManager.h/.cpp          # 会话/消息/发送/实时接收
+│   └── ContactManager.h/.cpp       # 好友列表/搜索/好友申请
 ├── network/                        # 网络层
 │   ├── ApiClient.h/.cpp            # REST 客户端（登录/会话/消息，自动携带 Bearer token）
 │   └── WsClient.h/.cpp             # WebSocket 实时通道（/ws/chat，message.created 推送）
 └── ui/                             # 界面层
-    ├── login/LoginWindow.h/.cpp    # 登录窗口（文字链接切换：账号登录 + 扫码登录演示）
+    ├── login/LoginWindow.h/.cpp    # 登录窗口（账号登录 + 二维码展示）
     ├── MainWindow.h/.cpp           # 三栏主窗口
     ├── color/Theme.h/.cpp          # 主题组件：语义化色板（浅色/深色）+ 全局 QSS 生成
     └── components/                 # 可复用 UI 组件库（每个组件一个文件夹）
@@ -134,4 +137,5 @@ third_party/qrcodegen/              # 二维码生成库（Nayuki，MIT，无依
 | 3 | 真实登录（对接后端 POST /auth/login） | ✅ 完成 |
 | 4 | 会话/消息接入：真实会话列表、历史消息、发送、WebSocket 实时接收 | ✅ 完成 |
 | 5 | SQLite 本地缓存（消息历史持久化、离线展示） | ⬜ 待做 |
-| 6 | 功能迭代（好友管理、未读同步、文件传输等） | ⬜ 待做 |
+| 6 | 好友管理（列表、搜索、好友申请、创建单聊） | ✅ 完成 |
+| 7 | 功能迭代（未读同步、文件传输、群聊等） | ⬜ 待做 |

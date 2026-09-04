@@ -3,9 +3,9 @@
 #include <QDateTime>
 #include <QDebug>
 
+#include "core/Session.h"
 #include "network/ApiClient.h"
 #include "network/WsClient.h"
-#include "core/Session.h"
 
 ChatManager::ChatManager(QObject *parent)
     : QObject(parent)
@@ -21,14 +21,6 @@ ChatManager::ChatManager(QObject *parent)
             this, &ChatManager::requestError);
     connect(&api, &ApiClient::conversationCreated,
             this, &ChatManager::onConversationCreated);
-    connect(&api, &ApiClient::friendsLoaded,
-            this, &ChatManager::onFriendsLoaded);
-    connect(&api, &ApiClient::usersSearchLoaded,
-            this, &ChatManager::onFriendSearchResultsLoaded);
-    connect(&api, &ApiClient::friendRequestSent,
-            this, &ChatManager::onFriendRequestSent);
-    connect(&api, &ApiClient::contactRequestFailed,
-            this, &ChatManager::contactRequestError);
 
     WsClient &ws = WsClient::instance();
     connect(&ws, &WsClient::messageCreated,
@@ -53,25 +45,6 @@ void ChatManager::reset()
 void ChatManager::loadSessions()
 {
     ApiClient::instance().fetchSessions();
-}
-
-void ChatManager::loadFriends()
-{
-    ApiClient::instance().fetchFriends();
-}
-
-void ChatManager::searchFriends(const QString &username)
-{
-    if (!username.trimmed().isEmpty()) {
-        ApiClient::instance().searchUsers(username.trimmed());
-    }
-}
-
-void ChatManager::addFriend(qint64 userId, const QString &message)
-{
-    if (userId > 0) {
-        ApiClient::instance().sendFriendRequest(userId, message);
-    }
 }
 
 void ChatManager::openSession(qint64 sessionId)
@@ -196,30 +169,6 @@ void ChatManager::onConversationCreated(const Conversation &conversation)
     sortSessions();
     emit sessionsChanged();
     emit conversationOpened(conversation);
-}
-
-void ChatManager::onFriendsLoaded(const QList<UserSummary> &friends)
-{
-    if (!Session::instance().isLoggedIn()) {
-        return;
-    }
-    emit friendsChanged(friends);
-}
-
-void ChatManager::onFriendSearchResultsLoaded(const QList<UserSummary> &users)
-{
-    if (!Session::instance().isLoggedIn()) {
-        return;
-    }
-    emit friendSearchResultsChanged(users);
-}
-
-void ChatManager::onFriendRequestSent(const FriendRequest &request)
-{
-    if (!Session::instance().isLoggedIn()) {
-        return;
-    }
-    emit friendRequestSent(request);
 }
 
 void ChatManager::appendMessage(const ChatMessage &message)

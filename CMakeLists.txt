@@ -21,12 +21,17 @@ find_package(Qt6 REQUIRED COMPONENTS
 qt_add_executable(XinChat
     src/main.cpp
 
+    src/app/ApplicationController.h
+    src/app/ApplicationController.cpp
+
     src/core/models.h
     src/core/Format.h
     src/core/Session.h
     src/core/Session.cpp
     src/core/ChatManager.h
     src/core/ChatManager.cpp
+    src/core/ContactManager.h
+    src/core/ContactManager.cpp
 
     src/network/ApiClient.h
     src/network/ApiClient.cpp

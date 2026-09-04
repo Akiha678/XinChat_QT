@@ -15,6 +15,7 @@
 #include <QVBoxLayout>
 
 #include "core/ChatManager.h"
+#include "core/ContactManager.h"
 #include "ui/color/Theme.h"
 #include "ui/components/button/button.h"
 #include "ui/components/conversationitem/ConversationItem.h"
@@ -30,6 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     m_chat = new ChatManager(this);
+    m_contacts = new ContactManager(this);
 
     setWindowTitle(QStringLiteral("XinChat"));
     resize(1000, 700);
@@ -72,13 +74,13 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onMessageAdded);
     connect(m_chat, &ChatManager::requestError,
             this, &MainWindow::onRequestError);
-    connect(m_chat, &ChatManager::contactRequestError,
+    connect(m_contacts, &ContactManager::requestError,
             this, &MainWindow::onContactRequestError);
-    connect(m_chat, &ChatManager::friendsChanged,
+    connect(m_contacts, &ContactManager::friendsChanged,
             this, &MainWindow::onFriendsLoaded);
-    connect(m_chat, &ChatManager::friendSearchResultsChanged,
+    connect(m_contacts, &ContactManager::searchResultsChanged,
             this, &MainWindow::onUsersSearchLoaded);
-    connect(m_chat, &ChatManager::friendRequestSent,
+    connect(m_contacts, &ContactManager::friendRequestSent,
             this, &MainWindow::onFriendRequestSent);
     connect(m_chat, &ChatManager::conversationOpened,
             this, &MainWindow::onConversationOpened);
@@ -107,7 +109,7 @@ void MainWindow::showEvent(QShowEvent *event)
         m_chat->startRealtime();
         // 加载消息列表
         m_chat->loadSessions();
-        m_chat->loadFriends();
+        m_contacts->loadFriends();
     }
 }
 
@@ -466,7 +468,7 @@ void MainWindow::rebuildSearchResults(const QList<UserSummary> &users)
             if (m_contactStatus) {
                 m_contactStatus->setText(QStringLiteral("正在发送好友申请…"));
             }
-            m_chat->addFriend(user.id);
+            m_contacts->addFriend(user.id);
         });
         m_searchResultList->setItemWidget(item, row);
     }
@@ -491,7 +493,7 @@ void MainWindow::onSearchFriendsClicked()
     if (m_contactStatus) {
         m_contactStatus->setText(QStringLiteral("搜索中…"));
     }
-    m_chat->searchFriends(username);
+    m_contacts->searchUsers(username);
 }
 
 void MainWindow::onFriendRequestSent(const FriendRequest &request)
