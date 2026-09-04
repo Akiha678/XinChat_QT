@@ -47,6 +47,21 @@ LoginWindow::LoginWindow(QWidget *parent)
             this, &LoginWindow::onLoginFailed);
 }
 
+void LoginWindow::resetForLogout()
+{
+    if (m_usernameEdit) {
+        m_usernameEdit->clear();
+    }
+    if (m_passwordEdit) {
+        m_passwordEdit->clear();
+    }
+    if (m_loginButton) {
+        m_loginButton->setLoading(false);
+    }
+    resetQrDemo();
+    showPasswordPage();
+}
+
 QLabel *LoginWindow::createSwitchLink(const QString &text,
                                       const std::function<void()> &onActivated) const
 {
@@ -64,7 +79,7 @@ QLabel *LoginWindow::createSwitchLink(const QString &text,
     return link;
 }
 
-// ---------- 页面一：账号密码登录 ----------
+// ---------- 账号密码登录 ----------
 
 QWidget *LoginWindow::createPasswordPage()
 {
@@ -113,22 +128,11 @@ QWidget *LoginWindow::createPasswordPage()
     return page;
 }
 
-// ---------- 页面二：扫码登录（演示模式） ----------
+// ---------- 扫码登录 ----------
 
 QWidget *LoginWindow::createQrPage()
 {
     auto *page = new QWidget(this);
-
-    auto *title = new QLabel(QStringLiteral("使用 XinChat 手机端扫码登录"), page);
-    title->setAlignment(Qt::AlignCenter);
-    QFont titleFont = title->font();
-    titleFont.setPixelSize(15);
-    titleFont.setBold(true);
-    title->setFont(titleFont);
-
-    m_qrStatus = new QLabel(QStringLiteral("请使用手机 XinChat 扫描下方二维码"), page);
-    m_qrStatus->setAlignment(Qt::AlignCenter);
-    m_qrStatus->setStyleSheet(QStringLiteral("color: #666666;"));
 
     m_qrImage = new QLabel(page);
     m_qrImage->setFixedSize(200, 200);
@@ -158,9 +162,9 @@ QWidget *LoginWindow::createQrPage()
 
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(40, 24, 40, 24);
-    layout->addWidget(title);
+    // layout->addWidget(title);
     layout->addSpacing(8);
-    layout->addWidget(m_qrStatus);
+    // layout->addWidget(m_qrStatus);
     layout->addSpacing(6);
     layout->addWidget(m_qrImage, 0, Qt::AlignHCenter);
     layout->addSpacing(4);
@@ -207,7 +211,6 @@ void LoginWindow::resetQrDemo()
     m_confirming = false;
     m_demoAccountCombo->setEnabled(true);
     m_demoScanButton->setLoading(false);  // 恢复"模拟手机扫码"文案
-    setQrStatus(QStringLiteral("请使用手机 XinChat 扫描下方二维码"));
 }
 
 void LoginWindow::refreshQrCode()
@@ -218,8 +221,7 @@ void LoginWindow::refreshQrCode()
     // 每次刷新生成新的场景 ID（真实实现中后端据此识别扫码会话）
     m_sceneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     resetQrDemo();
-    m_qrSceneLabel->setText(
-        QStringLiteral("场景ID: %1（30秒自动刷新）").arg(m_sceneId.left(8)));
+    // m_qrSceneLabel->setText(QStringLiteral("场景ID: %1（30秒自动刷新）").arg(m_sceneId.left(8)));
     renderQrCode(QStringLiteral("xinchat://scan/login?scene=%1").arg(m_sceneId));
 }
 

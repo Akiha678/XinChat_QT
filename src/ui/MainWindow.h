@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QList>
 #include <QString>
 
 #include "core/models.h"
@@ -8,7 +9,9 @@
 class ChatManager;
 class Button;
 class QLabel;
+class QLineEdit;
 class QListWidget;
+class QPushButton;
 class QListWidgetItem;
 class QStackedWidget;
 class QTextEdit;
@@ -23,6 +26,11 @@ public:
 
     // 登录成功由 LoginWindow 调用：设置标题并触发数据加载
     void setCurrentUser(const QString &displayName);
+    // 清理当前用户数据，供退出登录后下次登录复用窗口。
+    void resetForLogout();
+
+signals:
+    void logoutRequested();
 
 protected:
     void showEvent(QShowEvent *event) override;
@@ -32,12 +40,20 @@ private slots:
     void onConversationSelected(QListWidgetItem *item);
     void onSendClicked();
     void onToggleTheme();
+    void onLogoutClicked();
 
     void onSessionsChanged();
     void onSessionMessagesChanged(qint64 sessionId);
     void onMessageAdded(const ChatMessage &message);
     void onRequestError(const QString &operation, const QString &message);
     void onThemeChanged();
+    void onFriendsLoaded(const QList<UserSummary> &friends);
+    void onUsersSearchLoaded(const QList<UserSummary> &users);
+    void onFriendRequestSent(const FriendRequest &request);
+    void onContactRequestError(const QString &operation, const QString &message);
+    void onFriendItemClicked(QListWidgetItem *item);
+    void onSearchFriendsClicked();
+    void onConversationOpened(const Conversation &conversation);
 
 private:
     QWidget *createChatPage();
@@ -50,6 +66,8 @@ private:
     void setChatHeader(const QString &text);
     void refreshItemWidgets();        // 主题变化后重绘列表项（气泡/会话行）
     void updateThemeToggleText();
+    void rebuildFriendList();
+    void rebuildSearchResults(const QList<UserSummary> &users);
 
     ChatManager *m_chat = nullptr;
 
@@ -59,8 +77,16 @@ private:
     QListWidget *m_conversationList = nullptr;
     QListWidget *m_messageList = nullptr;
     QLabel *m_chatHeader = nullptr;
+    QLabel *m_settingsUserLabel = nullptr;
     QTextEdit *m_inputEdit = nullptr;
     Button *m_themeToggle = nullptr;
+    Button *m_logoutButton = nullptr;
+    QLineEdit *m_friendSearchEdit = nullptr;
+    QPushButton *m_friendSearchButton = nullptr;
+    QLabel *m_contactStatus = nullptr;
+    QListWidget *m_friendList = nullptr;
+    QListWidget *m_searchResultList = nullptr;
+    QList<UserSummary> m_friends;
 
     qint64 m_currentSessionId = 0;
     QString m_currentUserName;

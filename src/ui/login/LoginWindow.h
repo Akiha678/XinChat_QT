@@ -25,6 +25,9 @@ class LoginWindow : public QWidget {
 public:
     explicit LoginWindow(QWidget *parent = nullptr);
 
+    // 退出登录后重置登录表单并回到账户登录页。
+    void resetForLogout();
+
 signals:
     // 参数为登录成功后的展示名（昵称优先，其次用户名）
     void loginSucceeded(const QString &displayName);

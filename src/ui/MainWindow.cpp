@@ -4,6 +4,7 @@
 #include <QDebug>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QScrollBar>
@@ -38,9 +39,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_navList->setObjectName(QStringLiteral("navList"));
     m_navList->setFixedWidth(kNavWidth);
     m_navList->setSpacing(2);
-    m_navList->addItem(QStringLiteral("💬\n消息"));
-    m_navList->addItem(QStringLiteral("👥\n通讯录"));
-    m_navList->addItem(QStringLiteral("⚙️\n设置"));
+    m_navList->addItem(QStringLiteral("消息"));
+    m_navList->addItem(QStringLiteral("通讯录"));
+    m_navList->addItem(QStringLiteral("设置"));
     for (int i = 0; i < m_navList->count(); ++i) {
         m_navList->item(i)->setSizeHint(QSize(kNavWidth, 56));
     }
@@ -71,16 +72,30 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onMessageAdded);
     connect(m_chat, &ChatManager::requestError,
             this, &MainWindow::onRequestError);
+    connect(m_chat, &ChatManager::contactRequestError,
+            this, &MainWindow::onContactRequestError);
+    connect(m_chat, &ChatManager::friendsChanged,
+            this, &MainWindow::onFriendsLoaded);
+    connect(m_chat, &ChatManager::friendSearchResultsChanged,
+            this, &MainWindow::onUsersSearchLoaded);
+    connect(m_chat, &ChatManager::friendRequestSent,
+            this, &MainWindow::onFriendRequestSent);
+    connect(m_chat, &ChatManager::conversationOpened,
+            this, &MainWindow::onConversationOpened);
 
     // 主题变化：刷新导航图标与列表项颜色
     connect(&Theme::instance(), &Theme::themeChanged,
             this, &MainWindow::onThemeChanged);
 }
 
+// 当前用户
 void MainWindow::setCurrentUser(const QString &displayName)
 {
     m_currentUserName = displayName;
     setWindowTitle(QStringLiteral("XinChat - %1").arg(displayName));
+    if (m_settingsUserLabel) {
+        m_settingsUserLabel->setText(QStringLiteral("当前用户：%1").arg(displayName));
+    }
 }
 
 void MainWindow::showEvent(QShowEvent *event)
@@ -88,12 +103,15 @@ void MainWindow::showEvent(QShowEvent *event)
     QMainWindow::showEvent(event);
     if (!m_started) {
         m_started = true;
-        // 登录完成：建立实时通道并拉取会话列表
+        // 建立连接
         m_chat->startRealtime();
+        // 加载消息列表
         m_chat->loadSessions();
+        m_chat->loadFriends();
     }
 }
 
+// 聊天列表
 QWidget *MainWindow::createChatPage()
 {
     // 会话列表（中栏）
@@ -102,6 +120,7 @@ QWidget *MainWindow::createChatPage()
     m_conversationList->setFixedWidth(kConversationListWidth);
     m_conversationList->setSelectionMode(QAbstractItemView::SingleSelection);
     m_conversationList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    // 监听当前选择的会话
     connect(m_conversationList, &QListWidget::currentItemChanged,
             this, [this](QListWidgetItem *current, QListWidgetItem *previous) {
                 Q_UNUSED(previous);
@@ -124,11 +143,13 @@ QWidget *MainWindow::createChatPage()
     m_messageList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_messageList->setSpacing(6);
 
+    // 输入消息框
     m_inputEdit = new QTextEdit(this);
     m_inputEdit->setObjectName(QStringLiteral("inputEdit"));
     m_inputEdit->setFixedHeight(110);
-    m_inputEdit->setPlaceholderText(QStringLiteral("输入消息，Ctrl+Enter 发送"));
+    m_inputEdit->setPlaceholderText(QStringLiteral("请输入消息"));
 
+    // 发送按钮
     auto *sendButton = new QPushButton(QStringLiteral("发送"), this);
     sendButton->setFixedWidth(80);
     connect(sendButton, &QPushButton::clicked, this, &MainWindow::onSendClicked);
@@ -156,16 +177,62 @@ QWidget *MainWindow::createChatPage()
     return splitter;
 }
 
+// 好友界面
 QWidget *MainWindow::createContactsPage()
 {
     auto *page = new QWidget(this);
     auto *layout = new QVBoxLayout(page);
-    auto *label = new QLabel(QStringLiteral("通讯录\n\n（好友列表后续接入 GET /contact/friends）"), page);
-    label->setAlignment(Qt::AlignCenter);
-    layout->addWidget(label);
+    layout->setContentsMargins(28, 24, 28, 24);
+    layout->setSpacing(12);
+
+    auto *title = new QLabel(QStringLiteral("通讯录"), page);
+    QFont titleFont = title->font();
+    titleFont.setPixelSize(20);
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    layout->addWidget(title);
+
+    auto *searchRow = new QHBoxLayout;
+    m_friendSearchEdit = new QLineEdit(page);
+    m_friendSearchEdit->setPlaceholderText(QStringLiteral("输入用户名搜索好友"));
+    m_friendSearchButton = new QPushButton(QStringLiteral("搜索"), page);
+    m_friendSearchButton->setFixedWidth(80);
+    connect(m_friendSearchButton, &QPushButton::clicked,
+            this, &MainWindow::onSearchFriendsClicked);
+    connect(m_friendSearchEdit, &QLineEdit::returnPressed,
+            this, &MainWindow::onSearchFriendsClicked);
+    searchRow->addWidget(m_friendSearchEdit, 1);
+    searchRow->addWidget(m_friendSearchButton);
+    layout->addLayout(searchRow);
+
+    m_contactStatus = new QLabel(page);
+    m_contactStatus->setStyleSheet(QStringLiteral("color: #888888;"));
+    layout->addWidget(m_contactStatus);
+
+    m_searchResultList = new QListWidget(page);
+    m_searchResultList->setObjectName(QStringLiteral("contactSearchResults"));
+    m_searchResultList->setSelectionMode(QAbstractItemView::NoSelection);
+    m_searchResultList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_searchResultList->setVisible(false);
+    layout->addWidget(m_searchResultList);
+
+    auto *friendsTitle = new QLabel(QStringLiteral("我的好友"), page);
+    QFont friendsTitleFont = friendsTitle->font();
+    friendsTitleFont.setBold(true);
+    friendsTitle->setFont(friendsTitleFont);
+    layout->addWidget(friendsTitle);
+
+    m_friendList = new QListWidget(page);
+    m_friendList->setObjectName(QStringLiteral("friendsList"));
+    m_friendList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_friendList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    connect(m_friendList, &QListWidget::itemClicked,
+            this, &MainWindow::onFriendItemClicked);
+    layout->addWidget(m_friendList, 1);
     return page;
 }
 
+// 设置界面
 QWidget *MainWindow::createSettingsPage()
 {
     auto *page = new QWidget(this);
@@ -178,19 +245,24 @@ QWidget *MainWindow::createSettingsPage()
     titleFont.setBold(true);
     title->setFont(titleFont);
 
-    auto *userLabel = new QLabel(page);
-    userLabel->setObjectName(QStringLiteral("settingsUserLabel"));
-    userLabel->setText(QStringLiteral("当前用户：%1").arg(m_currentUserName));
+    m_settingsUserLabel = new QLabel(page);
+    m_settingsUserLabel->setObjectName(QStringLiteral("settingsUserLabel"));
+    m_settingsUserLabel->setText(QStringLiteral("当前用户：%1").arg(m_currentUserName));
 
     m_themeToggle = new Button(QString(), page);
     connect(m_themeToggle, &Button::clicked, this, &MainWindow::onToggleTheme);
     updateThemeToggleText();
 
+    m_logoutButton = new Button(QStringLiteral("退出登录"), page);
+    connect(m_logoutButton, &Button::clicked, this, &MainWindow::onLogoutClicked);
+
     layout->addWidget(title);
     layout->addSpacing(20);
-    layout->addWidget(userLabel);
+    layout->addWidget(m_settingsUserLabel);
     layout->addSpacing(30);
     layout->addWidget(m_themeToggle);
+    layout->addSpacing(12);
+    layout->addWidget(m_logoutButton);
     layout->addStretch();
     return page;
 }
@@ -253,6 +325,7 @@ void MainWindow::onConversationSelected(QListWidgetItem *item)
     m_chat->openSession(m_currentSessionId);
 }
 
+// 加载消息方法
 void MainWindow::reloadMessages()
 {
     m_messageList->clear();
@@ -314,6 +387,169 @@ void MainWindow::onRequestError(const QString &operation, const QString &message
     }
 }
 
+void MainWindow::onFriendsLoaded(const QList<UserSummary> &friends)
+{
+    m_friends = friends;
+    rebuildFriendList();
+    if (m_contactStatus) {
+        m_contactStatus->setText(friends.isEmpty() ? QStringLiteral("暂无好友，可搜索用户名添加")
+                                                   : QString());
+    }
+}
+
+void MainWindow::rebuildFriendList()
+{
+    if (!m_friendList) {
+        return;
+    }
+    m_friendList->clear();
+    for (const UserSummary &friendUser : m_friends) {
+        auto *item = new QListWidgetItem(m_friendList);
+        item->setData(Qt::UserRole, QVariant::fromValue<qint64>(friendUser.id));
+        item->setSizeHint(QSize(0, 58));
+
+        auto *row = new QWidget(m_friendList);
+        // 让列表视图接收点击事件，点击好友整行都能打开聊天。
+        row->setAttribute(Qt::WA_TransparentForMouseEvents);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(10, 4, 10, 4);
+        auto *info = new QLabel(row);
+        const QString displayName = friendUser.name.isEmpty()
+                                        ? friendUser.username
+                                        : friendUser.name;
+        const QString account = friendUser.username.isEmpty()
+                                    ? friendUser.email
+                                    : friendUser.username;
+        info->setText(QStringLiteral("%1\n%2").arg(displayName, account));
+        rowLayout->addWidget(info, 1);
+        m_friendList->setItemWidget(item, row);
+    }
+}
+
+void MainWindow::onUsersSearchLoaded(const QList<UserSummary> &users)
+{
+    if (m_friendSearchButton) {
+        m_friendSearchButton->setEnabled(true);
+    }
+    rebuildSearchResults(users);
+    if (m_contactStatus) {
+        m_contactStatus->setText(users.isEmpty() ? QStringLiteral("没有找到匹配的用户")
+                                                 : QStringLiteral("找到 %1 位用户").arg(users.size()));
+    }
+}
+
+void MainWindow::rebuildSearchResults(const QList<UserSummary> &users)
+{
+    if (!m_searchResultList) {
+        return;
+    }
+    m_searchResultList->clear();
+    m_searchResultList->setVisible(!users.isEmpty());
+
+    for (const UserSummary &user : users) {
+        auto *item = new QListWidgetItem(m_searchResultList);
+        item->setData(Qt::UserRole, QVariant::fromValue<qint64>(user.id));
+        item->setSizeHint(QSize(0, 58));
+
+        auto *row = new QWidget(m_searchResultList);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(10, 4, 10, 4);
+        auto *info = new QLabel(row);
+        const QString displayName = user.name.isEmpty() ? user.username : user.name;
+        info->setText(QStringLiteral("%1\n%2").arg(displayName, user.username));
+        rowLayout->addWidget(info, 1);
+        auto *addButton = new QPushButton(QStringLiteral("添加"), row);
+        addButton->setFixedWidth(64);
+        rowLayout->addWidget(addButton);
+        connect(addButton, &QPushButton::clicked, this, [this, user, addButton]() {
+            addButton->setEnabled(false);
+            if (m_contactStatus) {
+                m_contactStatus->setText(QStringLiteral("正在发送好友申请…"));
+            }
+            m_chat->addFriend(user.id);
+        });
+        m_searchResultList->setItemWidget(item, row);
+    }
+}
+
+void MainWindow::onSearchFriendsClicked()
+{
+    const QString username = m_friendSearchEdit ? m_friendSearchEdit->text().trimmed() : QString();
+    if (username.isEmpty()) {
+        if (m_contactStatus) {
+            m_contactStatus->setText(QStringLiteral("请输入用户名"));
+        }
+        if (m_searchResultList) {
+            m_searchResultList->clear();
+            m_searchResultList->setVisible(false);
+        }
+        return;
+    }
+    if (m_friendSearchButton) {
+        m_friendSearchButton->setEnabled(false);
+    }
+    if (m_contactStatus) {
+        m_contactStatus->setText(QStringLiteral("搜索中…"));
+    }
+    m_chat->searchFriends(username);
+}
+
+void MainWindow::onFriendRequestSent(const FriendRequest &request)
+{
+    if (m_contactStatus) {
+        const QString name = request.addressee.name.isEmpty()
+                                 ? request.addressee.username
+                                 : request.addressee.name;
+        m_contactStatus->setText(QStringLiteral("已向 %1 发送好友申请").arg(name));
+    }
+}
+
+void MainWindow::onContactRequestError(const QString &operation, const QString &message)
+{
+    qWarning() << "[MainWindow]" << operation << "失败:" << message;
+    if (operation == QStringLiteral("搜索好友") && m_friendSearchButton) {
+        m_friendSearchButton->setEnabled(true);
+    }
+    if (operation == QStringLiteral("添加好友") && m_searchResultList) {
+        for (QPushButton *button : m_searchResultList->findChildren<QPushButton *>()) {
+            button->setEnabled(true);
+        }
+    }
+    if (m_contactStatus) {
+        m_contactStatus->setText(QStringLiteral("%1失败：%2").arg(operation, message));
+    }
+}
+
+void MainWindow::onFriendItemClicked(QListWidgetItem *item)
+{
+    if (!item) {
+        return;
+    }
+    const qint64 friendId = item->data(Qt::UserRole).toLongLong();
+    if (friendId <= 0) {
+        return;
+    }
+    if (m_contactStatus) {
+        m_contactStatus->setText(QStringLiteral("正在打开聊天…"));
+    }
+    m_chat->openConversationWith(friendId);
+}
+
+void MainWindow::onConversationOpened(const Conversation &conversation)
+{
+    if (m_navList) {
+        m_navList->setCurrentRow(0);
+    }
+    QListWidgetItem *item = conversationItemOf(conversation.id);
+    if (!item) {
+        rebuildConversationList();
+        item = conversationItemOf(conversation.id);
+    }
+    if (item) {
+        m_conversationList->setCurrentItem(item);
+    }
+}
+
 QListWidgetItem *MainWindow::conversationItemOf(qint64 sessionId) const
 {
     for (int i = 0; i < m_conversationList->count(); ++i) {
@@ -358,6 +594,48 @@ void MainWindow::onToggleTheme()
                                                           : Theme::Scheme::Dark);
 }
 
+void MainWindow::onLogoutClicked()
+{
+    emit logoutRequested();
+}
+
+void MainWindow::resetForLogout()
+{
+    m_chat->reset();
+    m_currentSessionId = 0;
+    m_currentUserName.clear();
+    m_started = false;
+    setWindowTitle(QStringLiteral("XinChat"));
+    if (m_settingsUserLabel) {
+        m_settingsUserLabel->clear();
+    }
+
+    if (m_navList) {
+        m_navList->setCurrentRow(0);
+    }
+    if (m_conversationList) {
+        m_conversationList->clear();
+    }
+    if (m_messageList) {
+        m_messageList->clear();
+    }
+    if (m_friendList) {
+        m_friendList->clear();
+    }
+    if (m_searchResultList) {
+        m_searchResultList->clear();
+        m_searchResultList->setVisible(false);
+    }
+    m_friends.clear();
+    if (m_friendSearchEdit) {
+        m_friendSearchEdit->clear();
+    }
+    if (m_contactStatus) {
+        m_contactStatus->clear();
+    }
+}
+
+// 主题切换
 void MainWindow::onThemeChanged()
 {
     refreshItemWidgets();

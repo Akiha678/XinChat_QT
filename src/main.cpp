@@ -2,6 +2,7 @@
 #include <QObject>
 
 #include "ui/color/Theme.h"
+#include "core/Session.h"
 #include "ui/login/LoginWindow.h"
 #include "ui/MainWindow.h"
 
@@ -23,6 +24,18 @@ int main(int argc, char *argv[])
                          mainWindow.setCurrentUser(username);
                          mainWindow.show();
                          login.close();
+                     });
+
+    // 退出登录 -> 清理状态并返回登录窗口
+    QObject::connect(&mainWindow, &MainWindow::logoutRequested, &login,
+                     [&]() {
+                         mainWindow.resetForLogout();
+                         Session::instance().clear();
+                         mainWindow.hide();
+                         login.resetForLogout();
+                         login.show();
+                         login.raise();
+                         login.activateWindow();
                      });
 
     login.show();

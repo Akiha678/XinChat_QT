@@ -36,6 +36,25 @@ struct UserInfo {
     int avatarColor = 0;       // 头像色值（后端为 int 索引）
 };
 
+// 用户摘要（对应后端 UserSummaryResponse，用于通讯录及好友搜索）。
+struct UserSummary {
+    qint64 id = 0;
+    QString name;
+    QString username;
+    QString email;
+    int avatarColor = 0;
+};
+
+// 好友申请（对应后端 FriendRequestResponse）。
+struct FriendRequest {
+    qint64 id = 0;
+    UserSummary requester;
+    UserSummary addressee;
+    QString status;
+    QString message;
+    QDateTime createdAt;
+};
+
 // 登录成功后的结果
 struct LoginResult {
     UserInfo user;

@@ -20,7 +20,7 @@ public:
     // 语义化颜色集合（一份完整色板）
     struct Palette {
         // 品牌主色
-        QColor primary;         // 微信绿
+        QColor primary;     
         QColor primaryHover;
         QColor primaryPressed;
         QColor primaryDisabled;

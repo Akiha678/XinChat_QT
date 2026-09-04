@@ -8,6 +8,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QUrlQuery>
 
 #include "core/Format.h"
 #include "core/Session.h"
@@ -39,6 +40,22 @@ QJsonObject parseBodyObject(const QByteArray &raw, bool *ok)
         *ok = true;
     }
     return doc.object();
+}
+
+QJsonArray parseBodyArray(const QByteArray &raw, bool *ok)
+{
+    if (ok) {
+        *ok = false;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(raw, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        return QJsonArray();
+    }
+    if (ok) {
+        *ok = true;
+    }
+    return doc.array();
 }
 
 // 业务是否失败：HTTP>=400，或 HTTP200 但业务 code != 1000（NetworkResponse.failure）
@@ -81,6 +98,32 @@ QJsonArray unwrapDataArray(const QJsonObject &obj)
         return data.toArray();
     }
     return QJsonArray();
+}
+
+UserSummary parseUserSummary(const QJsonObject &u)
+{
+    UserSummary user;
+    user.id = u.value(QStringLiteral("id")).toVariant().toLongLong();
+    user.name = u.value(QStringLiteral("name")).toString();
+    if (user.name.isEmpty()) {
+        user.name = u.value(QStringLiteral("displayName")).toString();
+    }
+    user.username = u.value(QStringLiteral("username")).toString();
+    user.email = u.value(QStringLiteral("email")).toString();
+    user.avatarColor = u.value(QStringLiteral("avatarColor")).toInt();
+    return user;
+}
+
+FriendRequest parseFriendRequest(const QJsonObject &r)
+{
+    FriendRequest request;
+    request.id = r.value(QStringLiteral("id")).toVariant().toLongLong();
+    request.requester = parseUserSummary(r.value(QStringLiteral("requester")).toObject());
+    request.addressee = parseUserSummary(r.value(QStringLiteral("addressee")).toObject());
+    request.status = r.value(QStringLiteral("status")).toString();
+    request.message = r.value(QStringLiteral("message")).toString();
+    request.createdAt = xc::parseIsoInstant(r.value(QStringLiteral("createdAt")).toString());
+    return request;
 }
 
 // MsgResponse -> ChatMessage
@@ -362,4 +405,158 @@ void ApiClient::markMessagesRead(const QList<qint64> &messageIds)
     QNetworkReply *reply = m_nam->post(
         request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     connect(reply, &QNetworkReply::finished, reply, &QNetworkReply::deleteLater);
+}
+
+// ---------- 好友接口 ----------
+
+void ApiClient::fetchFriends()
+{
+    QNetworkReply *reply = m_nam->get(makeAuthedRequest(QStringLiteral("/contact/friends")));
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply]() { handleFriendsReply(reply); });
+}
+
+void ApiClient::searchUsers(const QString &username)
+{
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("username"), username);
+    const QString path = QStringLiteral("/contact/users/search?") + query.toString(QUrl::FullyEncoded);
+    QNetworkReply *reply = m_nam->get(makeAuthedRequest(path));
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply]() { handleSearchUsersReply(reply); });
+}
+
+void ApiClient::sendFriendRequest(qint64 addresseeId, const QString &message)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("addresseeId"), QJsonValue::fromVariant(QVariant::fromValue<qint64>(addresseeId)));
+    if (!message.trimmed().isEmpty()) {
+        body.insert(QStringLiteral("message"), message.trimmed());
+    }
+    QNetworkReply *reply = m_nam->post(
+        makeAuthedRequest(QStringLiteral("/contact/friend-requests")),
+        QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply]() { handleFriendRequestReply(reply); });
+}
+
+void ApiClient::createDirectConversation(qint64 friendId)
+{
+    QJsonObject body;
+    body.insert(QStringLiteral("friendId"), QJsonValue::fromVariant(QVariant::fromValue<qint64>(friendId)));
+    QNetworkReply *reply = m_nam->post(
+        makeAuthedRequest(QStringLiteral("/chat/conversation")),
+        QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply]() { handleCreateConversationReply(reply); });
+}
+
+void ApiClient::handleFriendsReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray raw = reply->readAll();
+    if (httpStatus == 0 && reply->error() != QNetworkReply::NoError) {
+        emit contactRequestFailed(QStringLiteral("好友列表"), QStringLiteral("无法连接服务器"));
+        return;
+    }
+    bool objectOk = false;
+    const QJsonObject obj = parseBodyObject(raw, &objectOk);
+    QJsonArray arr;
+    if (objectOk) {
+        if (isBusinessError(httpStatus, obj)) {
+            emit contactRequestFailed(QStringLiteral("好友列表"), extractErrorMessage(httpStatus, obj));
+            return;
+        }
+        arr = unwrapDataArray(obj);
+    } else {
+        bool arrayOk = false;
+        arr = parseBodyArray(raw, &arrayOk);
+        if (!arrayOk) {
+            emit contactRequestFailed(QStringLiteral("好友列表"), QStringLiteral("服务器返回数据格式错误"));
+            return;
+        }
+    }
+    QList<UserSummary> friends;
+    for (const QJsonValue &value : arr) {
+        friends.append(parseUserSummary(value.toObject()));
+    }
+    emit friendsLoaded(friends);
+}
+
+void ApiClient::handleSearchUsersReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray raw = reply->readAll();
+    if (httpStatus == 0 && reply->error() != QNetworkReply::NoError) {
+        emit contactRequestFailed(QStringLiteral("搜索好友"), QStringLiteral("无法连接服务器"));
+        return;
+    }
+    bool objectOk = false;
+    const QJsonObject obj = parseBodyObject(raw, &objectOk);
+    QJsonArray arr;
+    if (objectOk) {
+        if (isBusinessError(httpStatus, obj)) {
+            emit contactRequestFailed(QStringLiteral("搜索好友"), extractErrorMessage(httpStatus, obj));
+            return;
+        }
+        arr = unwrapDataArray(obj);
+    } else {
+        bool arrayOk = false;
+        arr = parseBodyArray(raw, &arrayOk);
+        if (!arrayOk) {
+            emit contactRequestFailed(QStringLiteral("搜索好友"), QStringLiteral("服务器返回数据格式错误"));
+            return;
+        }
+    }
+    QList<UserSummary> users;
+    for (const QJsonValue &value : arr) {
+        users.append(parseUserSummary(value.toObject()));
+    }
+    emit usersSearchLoaded(users);
+}
+
+void ApiClient::handleFriendRequestReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray raw = reply->readAll();
+    bool ok = false;
+    const QJsonObject obj = parseBodyObject(raw, &ok);
+    if (httpStatus == 0 && reply->error() != QNetworkReply::NoError) {
+        emit contactRequestFailed(QStringLiteral("添加好友"), QStringLiteral("无法连接服务器"));
+    } else if (!ok || isBusinessError(httpStatus, obj)) {
+        emit contactRequestFailed(QStringLiteral("添加好友"), ok ? extractErrorMessage(httpStatus, obj)
+                                                                    : QStringLiteral("服务器返回数据格式错误"));
+    } else {
+        QJsonObject data = unwrapData(obj);
+        if (data.isEmpty()) {
+            data = obj;
+        }
+        emit friendRequestSent(parseFriendRequest(data));
+    }
+}
+
+void ApiClient::handleCreateConversationReply(QNetworkReply *reply)
+{
+    reply->deleteLater();
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray raw = reply->readAll();
+    bool ok = false;
+    const QJsonObject obj = parseBodyObject(raw, &ok);
+    if (httpStatus == 0 && reply->error() != QNetworkReply::NoError) {
+        emit contactRequestFailed(QStringLiteral("打开聊天"), QStringLiteral("无法连接服务器"));
+        return;
+    }
+    if (!ok || isBusinessError(httpStatus, obj)) {
+        emit contactRequestFailed(QStringLiteral("打开聊天"), ok ? extractErrorMessage(httpStatus, obj)
+                                                                    : QStringLiteral("服务器返回数据格式错误"));
+        return;
+    }
+    QJsonObject data = unwrapData(obj);
+    if (data.isEmpty()) {
+        data = obj;
+    }
+    emit conversationCreated(parseConversation(data));
 }

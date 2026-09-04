@@ -5,6 +5,7 @@
 
 #include "network/ApiClient.h"
 #include "network/WsClient.h"
+#include "core/Session.h"
 
 ChatManager::ChatManager(QObject *parent)
     : QObject(parent)
@@ -18,6 +19,16 @@ ChatManager::ChatManager(QObject *parent)
             this, &ChatManager::onMessageSent);
     connect(&api, &ApiClient::chatRequestFailed,
             this, &ChatManager::requestError);
+    connect(&api, &ApiClient::conversationCreated,
+            this, &ChatManager::onConversationCreated);
+    connect(&api, &ApiClient::friendsLoaded,
+            this, &ChatManager::onFriendsLoaded);
+    connect(&api, &ApiClient::usersSearchLoaded,
+            this, &ChatManager::onFriendSearchResultsLoaded);
+    connect(&api, &ApiClient::friendRequestSent,
+            this, &ChatManager::onFriendRequestSent);
+    connect(&api, &ApiClient::contactRequestFailed,
+            this, &ChatManager::contactRequestError);
 
     WsClient &ws = WsClient::instance();
     connect(&ws, &WsClient::messageCreated,
@@ -29,15 +40,52 @@ void ChatManager::startRealtime()
     WsClient::instance().start();
 }
 
+void ChatManager::reset()
+{
+    WsClient::instance().stop();
+    m_sessions.clear();
+    m_messages.clear();
+    m_knownIds.clear();
+    m_openSessionId = 0;
+    m_sessionsLoaded = false;
+}
+
 void ChatManager::loadSessions()
 {
     ApiClient::instance().fetchSessions();
+}
+
+void ChatManager::loadFriends()
+{
+    ApiClient::instance().fetchFriends();
+}
+
+void ChatManager::searchFriends(const QString &username)
+{
+    if (!username.trimmed().isEmpty()) {
+        ApiClient::instance().searchUsers(username.trimmed());
+    }
+}
+
+void ChatManager::addFriend(qint64 userId, const QString &message)
+{
+    if (userId > 0) {
+        ApiClient::instance().sendFriendRequest(userId, message);
+    }
 }
 
 void ChatManager::openSession(qint64 sessionId)
 {
     m_openSessionId = sessionId;
     ApiClient::instance().fetchMessages(sessionId, 1, 50);
+}
+
+void ChatManager::openConversationWith(qint64 friendId)
+{
+    if (friendId <= 0) {
+        return;
+    }
+    ApiClient::instance().createDirectConversation(friendId);
 }
 
 void ChatManager::sendText(qint64 sessionId, const QString &text)
@@ -71,6 +119,9 @@ int ChatManager::unreadTotal() const
 
 void ChatManager::onSessionsLoaded(const QList<Conversation> &sessions)
 {
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
     m_sessions = sessions;
     sortSessions();
     m_sessionsLoaded = true;
@@ -81,6 +132,9 @@ void ChatManager::onMessagesLoaded(qint64 sessionId,
                                    const QList<ChatMessage> &messages,
                                    int total)
 {
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
     Q_UNUSED(total);
     // 后端按时间倒序（最新在前），转成时间升序便于 UI 从上到下渲染
     QList<ChatMessage> ascending = messages;
@@ -110,12 +164,62 @@ void ChatManager::onMessagesLoaded(qint64 sessionId,
 
 void ChatManager::onMessageSent(const ChatMessage &message)
 {
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
     appendMessage(message);  // 服务端会推 WS 回显，这里用 ID 去重兜底
 }
 
 void ChatManager::onIncomingMessage(const ChatMessage &message)
 {
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
     appendMessage(message);
+}
+
+void ChatManager::onConversationCreated(const Conversation &conversation)
+{
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
+    if (conversation.id <= 0) {
+        emit requestError(QStringLiteral("打开聊天"), QStringLiteral("服务器返回的会话无效"));
+        return;
+    }
+    Conversation *existing = this->conversation(conversation.id);
+    if (existing) {
+        *existing = conversation;
+    } else {
+        m_sessions.append(conversation);
+    }
+    sortSessions();
+    emit sessionsChanged();
+    emit conversationOpened(conversation);
+}
+
+void ChatManager::onFriendsLoaded(const QList<UserSummary> &friends)
+{
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
+    emit friendsChanged(friends);
+}
+
+void ChatManager::onFriendSearchResultsLoaded(const QList<UserSummary> &users)
+{
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
+    emit friendSearchResultsChanged(users);
+}
+
+void ChatManager::onFriendRequestSent(const FriendRequest &request)
+{
+    if (!Session::instance().isLoggedIn()) {
+        return;
+    }
+    emit friendRequestSent(request);
 }
 
 void ChatManager::appendMessage(const ChatMessage &message)

@@ -23,10 +23,16 @@ public:
 
     // 登录成功后调用：建立实时连接（会话列表由 MainWindow 触发 loadSessions）
     void startRealtime();
+    void reset();  // 退出登录时清理当前用户的内存状态并停止实时连接
 
     void loadSessions();
+    void loadFriends();
+    void searchFriends(const QString &username);
+    void addFriend(qint64 userId, const QString &message = QString());
     // 打开会话：拉取历史消息（最新一页），并把未读消息标记为已读
     void openSession(qint64 sessionId);
+    // 创建或复用与好友的单聊会话。
+    void openConversationWith(qint64 friendId);
     void sendText(qint64 sessionId, const QString &text);
 
     const QList<Conversation> &conversations() const;   // 按最近消息时间倒序
@@ -38,12 +44,21 @@ signals:
     void sessionMessagesChanged(qint64 sessionId);   // 该会话消息缓存已更新
     void messageAdded(const ChatMessage &message);   // 收到新消息（含自己发送回显）
     void requestError(const QString &operation, const QString &message);
+    void contactRequestError(const QString &operation, const QString &message);
+    void conversationOpened(const Conversation &conversation);
+    void friendsChanged(const QList<UserSummary> &friends);
+    void friendSearchResultsChanged(const QList<UserSummary> &users);
+    void friendRequestSent(const FriendRequest &request);
 
 private:
     void onSessionsLoaded(const QList<Conversation> &sessions);
     void onMessagesLoaded(qint64 sessionId, const QList<ChatMessage> &messages, int total);
     void onMessageSent(const ChatMessage &message);
     void onIncomingMessage(const ChatMessage &message);
+    void onConversationCreated(const Conversation &conversation);
+    void onFriendsLoaded(const QList<UserSummary> &friends);
+    void onFriendSearchResultsLoaded(const QList<UserSummary> &users);
+    void onFriendRequestSent(const FriendRequest &request);
     void appendMessage(const ChatMessage &message);   // 去重后入缓存并更新会话行
     void sortSessions();
     Conversation *conversation(qint64 sessionId);
