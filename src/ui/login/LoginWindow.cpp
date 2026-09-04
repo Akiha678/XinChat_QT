@@ -1,8 +1,6 @@
 #include "ui/login/LoginWindow.h"
 
-#include <QComboBox>
 #include <QFont>
-#include <QHBoxLayout>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
@@ -18,10 +16,6 @@
 #include "ui/color/Theme.h"
 #include "ui/components/button/button.h"
 #include "ui/components/dialog/dialog.h"
-
-namespace {
-const QString kDemoPassword = QStringLiteral("123456");  // 后端种子账号密码
-}
 
 LoginWindow::LoginWindow(QWidget *parent)
     : QWidget(parent)
@@ -58,7 +52,6 @@ void LoginWindow::resetForLogout()
     if (m_loginButton) {
         m_loginButton->setLoading(false);
     }
-    resetQrDemo();
     showPasswordPage();
 }
 
@@ -102,9 +95,9 @@ QWidget *LoginWindow::createPasswordPage()
     m_loginButton = new Button(QStringLiteral("登  录"), page);
     connect(m_loginButton, &Button::clicked, this, &LoginWindow::onLoginClicked);
 
-    // 回车键快速提交
+    // 账号输入框回车切换到密码输入框；密码输入框回车提交登录
     connect(m_usernameEdit, &QLineEdit::returnPressed,
-            this, &LoginWindow::onLoginClicked);
+            this, [this]() { m_passwordEdit->setFocus(); });
     connect(m_passwordEdit, &QLineEdit::returnPressed,
             this, &LoginWindow::onLoginClicked);
 
@@ -135,45 +128,20 @@ QWidget *LoginWindow::createQrPage()
     auto *page = new QWidget(this);
 
     m_qrImage = new QLabel(page);
-    m_qrImage->setFixedSize(200, 200);
+    m_qrImage->setFixedSize(220, 220);
     m_qrImage->setAlignment(Qt::AlignCenter);
     m_qrImage->setStyleSheet(QStringLiteral("border: 1px solid #DDDDDD;"));
 
-    m_qrSceneLabel = new QLabel(page);
-    m_qrSceneLabel->setAlignment(Qt::AlignCenter);
-    m_qrSceneLabel->setStyleSheet(QStringLiteral("color: #999999; font-size: 11px;"));
-
-    // 模拟手机端：当前"手机"上已登录的账号
-    m_demoAccountCombo = new QComboBox(page);
-    m_demoAccountCombo->addItem(QStringLiteral("管理员一 (admin1)"), QStringLiteral("admin1"));
-    m_demoAccountCombo->addItem(QStringLiteral("管理员二 (admin2)"), QStringLiteral("admin2"));
-
-    m_demoScanButton = new Button(QStringLiteral("模拟手机扫码"), page);
-    connect(m_demoScanButton, &Button::clicked,
-            this, &LoginWindow::onDemoScanClicked);
-
-    auto *row = new QHBoxLayout;
-    row->addWidget(m_demoAccountCombo, 1);
-    row->addWidget(m_demoScanButton, 1);
-
-    // 底部文字链接：切回账号登录（微信风格）
+    // 保留切换回账号登录的入口，扫码页不展示其他辅助内容。
     auto *passwordLink = createSwitchLink(QStringLiteral("账号登录"),
                                           [this]() { showPasswordPage(); });
 
     auto *layout = new QVBoxLayout(page);
-    layout->setContentsMargins(40, 24, 40, 24);
-    // layout->addWidget(title);
-    layout->addSpacing(8);
-    // layout->addWidget(m_qrStatus);
-    layout->addSpacing(6);
+    layout->setContentsMargins(0, 0, 0, 24);
+    layout->setAlignment(Qt::AlignCenter);
     layout->addWidget(m_qrImage, 0, Qt::AlignHCenter);
-    layout->addSpacing(4);
-    layout->addWidget(m_qrSceneLabel);
-    layout->addSpacing(10);
-    layout->addLayout(row);
-    layout->addSpacing(6);
-    layout->addStretch(1);
-    layout->addWidget(passwordLink);
+    layout->addSpacing(16);
+    layout->addWidget(passwordLink, 0, Qt::AlignHCenter);
 
     // 二维码 30 秒自动刷新（模拟真实产品的过期机制）
     m_qrRefreshTimer = new QTimer(this);
@@ -198,30 +166,12 @@ void LoginWindow::showQrPage()
     refreshQrCode();  // 每次进入扫码页都换一个新二维码（防过期）
 }
 
-// ---------- 扫码状态与二维码渲染 ----------
-
-void LoginWindow::setQrStatus(const QString &text)
-{
-    m_qrStatus->setText(text);
-}
-
-void LoginWindow::resetQrDemo()
-{
-    m_scanned = false;
-    m_confirming = false;
-    m_demoAccountCombo->setEnabled(true);
-    m_demoScanButton->setLoading(false);  // 恢复"模拟手机扫码"文案
-}
+// ---------- 二维码渲染 ----------
 
 void LoginWindow::refreshQrCode()
 {
-    if (m_confirming) {
-        return;  // 确认登录过程中不刷新二维码
-    }
     // 每次刷新生成新的场景 ID（真实实现中后端据此识别扫码会话）
     m_sceneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    resetQrDemo();
-    // m_qrSceneLabel->setText(QStringLiteral("场景ID: %1（30秒自动刷新）").arg(m_sceneId.left(8)));
     renderQrCode(QStringLiteral("xinchat://scan/login?scene=%1").arg(m_sceneId));
 }
 
@@ -255,30 +205,6 @@ void LoginWindow::renderQrCode(const QString &content)
     m_qrImage->setPixmap(QPixmap::fromImage(image));
 }
 
-void LoginWindow::onDemoScanClicked()
-{
-    if (m_confirming) {
-        return;
-    }
-
-    if (!m_scanned) {
-        // 第一步：模拟手机扫码成功
-        m_scanned = true;
-        m_demoAccountCombo->setEnabled(false);  // 扫码后锁定所选账号
-        m_demoScanButton->setText(QStringLiteral("在手机上确认登录"));
-        setQrStatus(QStringLiteral("已扫码，请在手机上确认登录"));
-        return;
-    }
-
-    // 第二步：模拟手机确认 -> 走真实登录换取 token
-    m_confirming = true;
-    m_demoScanButton->setLoading(true, QStringLiteral("确认中..."));
-    setQrStatus(QStringLiteral("已确认，正在登录..."));
-
-    const QString account = m_demoAccountCombo->currentData().toString();
-    ApiClient::instance().login(account, kDemoPassword);
-}
-
 // ---------- 共用：登录结果处理 ----------
 
 void LoginWindow::onLoginClicked()
@@ -303,8 +229,6 @@ void LoginWindow::onLoginSucceeded(const LoginResult &result)
 {
     // 两种登录方式共用的收尾：恢复按钮状态
     m_loginButton->setLoading(false);
-    m_demoScanButton->setLoading(false);
-    m_confirming = false;
 
     // 保存登录态，供后续鉴权接口使用
     Session::instance().setLogin(result);
@@ -318,9 +242,6 @@ void LoginWindow::onLoginSucceeded(const LoginResult &result)
 void LoginWindow::onLoginFailed(int /*httpStatus*/, int /*code*/, const QString &message)
 {
     m_loginButton->setLoading(false);
-    m_demoScanButton->setLoading(false);
-    m_confirming = false;
-    resetQrDemo();  // 扫码登录失败则回到"等待扫码"状态
 
     Dialog::warning(this, QStringLiteral("登录失败"), message);
 }
